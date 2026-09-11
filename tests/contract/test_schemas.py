@@ -286,7 +286,7 @@ def test_host_visibility_release_summary_matches_host_observation_schema():
     assert errors == []
     assert summary["acceptance"] == "unverified"
     assert summary["probeStatus"] == "host_visibility"
-    assert summary["sourceCommit"] == "4b70ba7"
+    assert summary["sourceCommit"] == "1ce36fb"
     assert summary["facts"] is None
     assert summary["factsDigest"] is None
     assert summary["pins"] is None

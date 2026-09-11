@@ -1,0 +1,257 @@
+{
+  "profileId": "wsl2:l1@openshell-docker",
+  "collectedAt": "2026-09-11T19:04:55.687907Z",
+  "acceptance": "unverified",
+  "probeStatus": "host_visibility",
+  "probeSuiteVersion": "0.1.0-host-visibility",
+  "sourceCommit": "1ce36fb",
+  "facts": null,
+  "factsDigest": null,
+  "pins": null,
+  "failureGroups": [
+    "host"
+  ],
+  "groups": [
+    {
+      "name": "host",
+      "result": "fail",
+      "reason": "wsl.conf automount.enabled is not false; wsl.conf interop.enabled is not false; mountinfo contains drvfs or Windows drive mounts: /mnt/c,/mnt/d,/mnt/e; WSLInterop is enabled; LSM list is unreadable; \\\\wsl$\\Ubuntu-24.04 is visible from Windows"
+    }
+  ],
+  "observations": {
+    "kernel": "6.18.33.2-microsoft-standard-WSL2",
+    "distro": {
+      "name": "Ubuntu-24.04",
+      "wslVersion": "2.7.11.0",
+      "windowsVersion": "10.0.26200.9168",
+      "state": "Running",
+      "siblings": [
+        "docker-desktop"
+      ]
+    },
+    "wslConf": {
+      "systemd": true,
+      "automountEnabled": null,
+      "interopEnabled": null,
+      "presentKeys": [
+        "boot.systemd",
+        "user.default"
+      ]
+    },
+    "mounts": {
+      "windowsDriveMounts": [
+        "/mnt/c",
+        "/mnt/d",
+        "/mnt/e"
+      ],
+      "drvfsPresent": true
+    },
+    "interop": {
+      "wslInteropFile": "present",
+      "enabled": true
+    },
+    "cgroup": {
+      "controllers": [
+        "cpuset",
+        "cpu",
+        "io",
+        "memory",
+        "hugetlb",
+        "pids",
+        "rdma"
+      ],
+      "subtreeControl": [
+        "cpuset",
+        "cpu",
+        "io",
+        "memory",
+        "hugetlb",
+        "pids",
+        "rdma"
+      ],
+      "controllersReadable": true,
+      "subtreeReadable": true,
+      "driver": "systemd",
+      "version": "2"
+    },
+    "lsm": {
+      "names": [],
+      "landlockPresent": false,
+      "source": null
+    },
+    "engine": {
+      "engineVersion": "29.1.3",
+      "defaultRuntime": "runc",
+      "cgroupDriver": "systemd",
+      "cgroupVersion": "2",
+      "dockerRootDir": "/var/lib/docker"
+    },
+    "wslShare": {
+      "path": "\\\\wsl$\\Ubuntu-24.04",
+      "visibility": "visible"
+    }
+  },
+  "commands": [
+    {
+      "name": "wsl.version",
+      "argv": [
+        "wsl.exe",
+        "--version"
+      ],
+      "returncode": 0,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "wsl.list",
+      "argv": [
+        "wsl.exe",
+        "-l",
+        "-v"
+      ],
+      "returncode": 0,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "wsl.kernel",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "Ubuntu-24.04",
+        "--",
+        "uname",
+        "-r"
+      ],
+      "returncode": 0,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "wsl.conf",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "Ubuntu-24.04",
+        "--",
+        "cat",
+        "/etc/wsl.conf"
+      ],
+      "returncode": 0,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "docker.version",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "Ubuntu-24.04",
+        "--",
+        "docker",
+        "version"
+      ],
+      "returncode": 0,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "docker.info",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "Ubuntu-24.04",
+        "--",
+        "docker",
+        "info"
+      ],
+      "returncode": 0,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "host.mountinfo",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "Ubuntu-24.04",
+        "--",
+        "cat",
+        "/proc/self/mountinfo"
+      ],
+      "returncode": 0,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "host.interop",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "Ubuntu-24.04",
+        "--",
+        "cat",
+        "/proc/sys/fs/binfmt_misc/WSLInterop"
+      ],
+      "returncode": 0,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "host.cgroup.controllers",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "Ubuntu-24.04",
+        "--",
+        "cat",
+        "/sys/fs/cgroup/cgroup.controllers"
+      ],
+      "returncode": 0,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "host.cgroup.subtree",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "Ubuntu-24.04",
+        "--",
+        "cat",
+        "/sys/fs/cgroup/cgroup.subtree_control"
+      ],
+      "returncode": 0,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "host.lsm",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "Ubuntu-24.04",
+        "--",
+        "cat",
+        "/sys/kernel/security/lsm"
+      ],
+      "returncode": 1,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "host.lsm.proc",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "Ubuntu-24.04",
+        "--",
+        "cat",
+        "/proc/sys/kernel/lsm"
+      ],
+      "returncode": 1,
+      "timed_out": false,
+      "truncated": false
+    }
+  ]
+}
