@@ -8,6 +8,7 @@ import pytest
 
 from kappa_box.probes import (
     CommandResult,
+    SubprocessExecutor,
     _bounded_text,
     collect_readonly_inventory,
     default_command_specs,
@@ -107,9 +108,11 @@ def test_inventory_uses_only_fixed_read_only_commands():
         "wsl2:l1@openshell-docker",
         executor=executor,
         collected_at="2026-09-11T12:00:00Z",
+        source_commit="test-commit",
     )
 
     assert inventory["probeSuiteVersion"] == "0.1.0-inventory"
+    assert inventory["sourceCommit"] == "test-commit"
     assert inventory["facts"] is None
     assert inventory["factsDigest"] is None
     assert inventory["pins"] is None
@@ -131,6 +134,47 @@ def test_inventory_uses_only_fixed_read_only_commands():
         "docker",
         "info",
     ]
+
+
+def test_inventory_rejects_executor_result_with_wrong_command_identity():
+    class LyingExecutor:
+        distribution = "Ubuntu-24.04"
+
+        def run(
+            self, name: str, argv: tuple[str, ...], timeout_seconds: float
+        ) -> CommandResult:
+            return CommandResult(
+                name="spoofed",
+                argv=("sh", "-c", "echo unsafe"),
+                returncode=0,
+                stdout="ok",
+                stderr="",
+                duration_ms=1,
+                timed_out=False,
+            )
+
+    with pytest.raises(ValueError, match="result does not match registered command"):
+        collect_readonly_inventory(
+            "wsl2:l1@openshell-docker",
+            executor=LyingExecutor(),
+            collected_at="2026-09-11T12:00:00Z",
+            source_commit="test-commit",
+        )
+
+
+def test_subprocess_executor_bounds_os_error_output(monkeypatch):
+    from kappa_box import probes
+
+    def fail(*args, **kwargs):
+        raise OSError("x" * 1000)
+
+    monkeypatch.setattr(probes.subprocess, "run", fail)
+    result = SubprocessExecutor(max_output_bytes=16).run(
+        "wsl.version", ("wsl.exe", "--version"), 30.0
+    )
+
+    assert result.returncode == 127
+    assert len(result.stderr.encode("utf-8")) <= 16
 
 
 def test_inventory_retains_command_failures_without_claiming_profile_failure():
@@ -157,6 +201,7 @@ def test_inventory_retains_command_failures_without_claiming_profile_failure():
         "wsl2:l1@openshell-docker",
         executor=FakeExecutor(results),
         collected_at="2026-09-11T12:00:00Z",
+        source_commit="test-commit",
     )
 
     docker_info = next(
@@ -177,6 +222,7 @@ def test_inventory_rejects_non_registered_distribution():
             "wsl2:l1@openshell-docker",
             executor=executor,
             collected_at="2026-09-11T12:00:00Z",
+            source_commit="test-commit",
             distribution="Other-Distro",
         )
 

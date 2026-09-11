@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from jsonschema import Draft202012Validator, FormatChecker
 from referencing import Registry, Resource
+
+_RFC3339 = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$"
+)
 
 
 class ProfileIdentityError(ValueError):
@@ -68,7 +74,7 @@ def load_profile(path: str | Path) -> dict[str, Any]:
             registry=registry,
             format_checker=FormatChecker(),
         ).iter_errors(profile),
-        key=lambda error: list(error.absolute_path),
+        key=lambda error: tuple(str(part) for part in error.absolute_path),
     )
     if errors:
         first = errors[0]
@@ -78,6 +84,16 @@ def load_profile(path: str | Path) -> dict[str, Any]:
         )
 
     validate_profile_identity(profile)
+    probe = profile["probe"]
+    last_run_at = probe["lastRunAt"]
+    if last_run_at is not None:
+        if not _RFC3339.fullmatch(last_run_at):
+            raise ValueError("probe.lastRunAt must be an RFC 3339 timestamp")
+        try:
+            datetime.fromisoformat(last_run_at)
+        except ValueError as error:
+            raise ValueError("probe.lastRunAt must be an RFC 3339 timestamp") from error
+
     expected_facts = profile.get("expectedFacts")
     if (
         isinstance(expected_facts, Mapping)

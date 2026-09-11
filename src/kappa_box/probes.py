@@ -105,7 +105,7 @@ class SubprocessExecutor:
                 argv=argv,
                 returncode=127,
                 stdout="",
-                stderr=str(error),
+                stderr=_bounded_text(str(error), self._max_output_bytes),
                 duration_ms=_duration_ms(started),
                 timed_out=False,
             )
@@ -164,6 +164,7 @@ def collect_readonly_inventory(
     *,
     executor: CommandExecutor,
     collected_at: str,
+    source_commit: str,
     distribution: str = _FIRST_PROFILE_DISTRIBUTION,
 ) -> dict[str, Any]:
     """Run fixed host inventory commands without making an acceptance claim.
@@ -176,6 +177,8 @@ def collect_readonly_inventory(
         raise ValueError(f"unsupported inventory profile: {profile_id}")
     if distribution != _FIRST_PROFILE_DISTRIBUTION:
         raise ValueError("distribution is not the registered distribution")
+    if not source_commit:
+        raise ValueError("source_commit must be non-empty")
     executor_distribution = getattr(executor, "distribution", distribution)
     if executor_distribution != distribution:
         raise ValueError("executor distribution does not match registered distribution")
@@ -183,6 +186,10 @@ def collect_readonly_inventory(
     commands = []
     for spec in default_command_specs(distribution):
         command = executor.run(spec.name, spec.argv, spec.timeout_seconds)
+        if command.name != spec.name or command.argv != spec.argv:
+            raise ValueError(
+                f"executor result does not match registered command: {spec.name}"
+            )
         command_record = asdict(command)
         command_record["argv"] = list(command.argv)
         commands.append(command_record)
@@ -193,6 +200,7 @@ def collect_readonly_inventory(
         "acceptance": "unverified",
         "probeStatus": "inventory_only",
         "probeSuiteVersion": _PROBE_SUITE_VERSION,
+        "sourceCommit": source_commit,
         "facts": None,
         "factsDigest": None,
         "pins": None,

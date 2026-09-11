@@ -72,6 +72,11 @@ def facts_validator() -> Draft202012Validator:
     )
 
 
+def inventory_validator() -> Draft202012Validator:
+    inventory = load_schema("inventory.schema.json")
+    return Draft202012Validator(inventory, format_checker=FormatChecker())
+
+
 def observed_facts() -> dict:
     facts = copy.deepcopy(canonical_facts())
     facts["sandboxId"] = "sb-1"
@@ -114,6 +119,18 @@ def unverified_profile() -> dict:
             "result": "never_run",
         },
     }
+
+
+def test_readonly_inventory_release_summary_matches_inventory_schema():
+    summary = json.loads(
+        (
+            ROOT / "evidence" / "releases" / "initial-readonly-inventory-summary.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    errors = list(inventory_validator().iter_errors(summary))
+
+    assert errors == []
 
 
 def test_facts_schema_accepts_complete_observation():

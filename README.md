@@ -133,7 +133,7 @@ profiles.inspect → sandboxes.create（幂等）→ waitReady → facts
 
 ## 9. 读这份文档时要注意
 
-- 本项目当前已执行一次**只读宿主盘点**；提交的脱敏摘要在 `evidence/releases/initial-readonly-inventory-summary.json`，本机原始结果在被忽略的 `evidence/probe-runs/initial-readonly-inventory.json`。这不等于沙箱隔离已验证。
+- 本项目当前已执行一次**只读宿主盘点**；提交的脱敏摘要在 `evidence/releases/initial-readonly-inventory-summary.json`，其结构合同为 `schemas/inventory.schema.json`；本机原始结果在被忽略的 `evidence/probe-runs/initial-readonly-inventory.json`。这不等于沙箱隔离已验证。
 - 完整探针套件仍是待执行项。任何「可用」「已验证」的说法在拿到完整探针输出之前都是声明。
 - facts 与 profile 的 v1 机器可读合同见 `schemas/`，规范化与 digest 决定见 `docs/decisions/0001-facts-contract.md`。
 - 上游 OpenShell 处于快速迭代（日更量级发布），因此本目录的版本相关陈述都标注了观察时间；

@@ -317,11 +317,15 @@
             "required": ["suiteVersion", "lastRunAt", "evidenceRef"],
             "properties": {
               "suiteVersion": {"type": "string", "minLength": 1},
-              "lastRunAt": {"type": "string", "minLength": 1},
               "evidenceRef": {"type": "string", "minLength": 1},
               "result": {"const": "pass"},
               "failureGroups": {"maxItems": 0},
-              "lastRunAt": {"type": "string", "format": "date-time"}
+              "lastRunAt": {
+                "type": "string",
+                "minLength": 1,
+                "format": "date-time",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$"
+              }
             }
           }
         }

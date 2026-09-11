@@ -62,10 +62,14 @@ profile 的**预注册枚举**；登记层说的是**期望 facts**；控制面�
 
 ## 5. facts 与 digest
 
-facts 是 ⑦ / ⑧ / ⑨ 的生效值加上 ⑤ 的实例身份。字段清单（本表是**唯一**定义处，其它文档只引用它）：
+facts 是 ⑦ / ⑧ / ⑨ 的生效值加上 ⑤ 的实例身份。字段含义如下；字段类型、必填关系和可选值以
+[`schemas/facts.schema.json`](../schemas/facts.schema.json) 为机器可读权威定义：
 
 | 字段 | 含义 |
 | --- | --- |
+| `schemaVersion` | facts 合同版本 |
+| `sandboxId` | 实例身份，用于关联本次观察；不进入 digest |
+| `profileId` | 产生该事实的已登记 profile 身份 |
 | `kernel` | 实例所依托的内核标识（`uname -r`），用于说明强制发生在宿主内核还是 WSL2 内核 |
 | `lsm` / `landlock` | 生效的 Linux 安全模块列表；Landlock 的 ABI 版本（决定哪些文件限制可用）；profile 是 `hard_requirement`（缺一即拒绝创建）还是 `best_effort`（缺失时警告继续） |
 | `seccomp` | 系统调用过滤是否启用及其 profile |
