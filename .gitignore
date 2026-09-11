@@ -1,0 +1,21 @@
+# Pi session metadata and local instructions
+.pi/
+
+# Local runtime output and secrets
+.env
+.env.*
+*.key
+*.pem
+
+# Language and tool caches
+__pycache__/
+.pytest_cache/
+node_modules/
+.dist/
+dist/
+build/
+
+# Probe runs may contain host-specific or sensitive raw output.
+# Commit reviewed, redacted release evidence separately.
+evidence/probe-runs/*
+!evidence/probe-runs/.gitkeep

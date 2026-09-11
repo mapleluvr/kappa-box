@@ -1,0 +1,33 @@
+flowchart TB
+  REQ["请求下行：profile id + spec<br/>（无宿主命令 / 无宿主路径 / 无引擎 socket）"]
+
+  subgraph SEM["声明与契约（可写错，可漂移）"]
+    L1["① 评估语义<br/>claim / baseline / task / oracle / receipt"]
+    L2["② 隔离契约<br/>profile 预注册枚举 · 策略与采集调用面"]
+    L3["③ SDK 面<br/>幂等 create · 事件就绪 · exec/session · stage/collect · stop/delete"]
+  end
+
+  subgraph REG["登记与路由（需要现场验证）"]
+    L4["④ resolver + profile registry<br/>host-class:tier@variant · acceptance · 期望 facts"]
+    L5["⑤ 宿主服务（每宿主一个）<br/>生命周期唯一所有者 · 审计事件 · pin 账本"]
+  end
+
+  subgraph ENF["强制层（宿主上真实生效的位置）"]
+    L6["⑥ 沙箱控制面<br/>gateway（宿主侧） + supervisor（实例内）"]
+    L7["⑦ 内核强制<br/>Landlock · seccomp · cgroup · namespace"]
+  end
+
+  subgraph RUN["执行层（⑧ 在宿主侧启动，⑨ 被约束）"]
+    L8["⑧ 执行层<br/>OCI(runc) · runsc · microVM guest"]
+    L9["⑨ 实例与负载<br/>agent 进程 / 候选代码"]
+  end
+
+  REQ --> L3
+  L1 --> L2 --> L3 --> L4 --> L5 --> L6 --> L7 --> L8 --> L9
+
+  L7 -.->|"生效值"| FACTS["facts：内核 / LSM · Landlock ABI / 引擎 · runtime / 镜像 digest / 生效限额"]
+  L8 -.-> FACTS
+  L9 -.-> FACTS
+  FACTS -.->|"与期望值比对，不一致即拒绝"| L5
+  L5 -.->|"同一 digest 进入证据记录"| L1
+  L6 -.->|"审计事件"| L5

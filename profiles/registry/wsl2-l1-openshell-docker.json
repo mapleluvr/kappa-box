@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1",
+  "id": "wsl2:l1@openshell-docker",
+  "hostClass": "wsl2",
+  "tier": "l1",
+  "variant": "openshell-docker",
+  "acceptance": "unverified",
+  "runtime": {
+    "engine": "docker",
+    "name": "openshell",
+    "rootless": null
+  },
+  "policy": {
+    "landlockCompatibility": "hard_requirement",
+    "networkProfiles": ["offline", "restricted"],
+    "grants": [
+      {"path": "/work", "mode": "rw"}
+    ]
+  },
+  "limits": {
+    "cpu": null,
+    "memoryBytes": null,
+    "pids": null
+  },
+  "channels": {
+    "longLivedProcess": null,
+    "pty": null,
+    "separateStdoutStderr": null,
+    "maxArtifactBytes": null,
+    "snapshot": null
+  },
+  "expectedFacts": null,
+  "pins": {},
+  "probe": {
+    "suiteVersion": null,
+    "lastRunAt": null,
+    "result": "never_run",
+    "failureGroups": [],
+    "evidenceRef": null
+  }
+}

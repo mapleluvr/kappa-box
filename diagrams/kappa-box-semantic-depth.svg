@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="940" viewBox="0 0 1240 940" role="img" aria-labelledby="title desc" font-family="Segoe UI, Microsoft YaHei, Helvetica, Arial, sans-serif">
+  <title id="title">kappa-box 语义架构纵深</title>
+  <desc id="desc">九层纵深：① 评估语义、② 隔离契约、③ SDK 面、④ resolver 与 profile registry、⑤ 宿主服务、⑥ 沙箱控制面、⑦ 内核强制、⑧ 执行层、⑨ 实例与负载。左侧为请求下行，右侧为事实上行与比对。</desc>
+
+  <defs>
+    <marker id="arrow-down" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5b6470"/>
+    </marker>
+    <marker id="arrow-up" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2f6f4f"/>
+    </marker>
+    <marker id="arrow-side" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#7aa7d9"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1240" height="940" fill="#ffffff"/>
+
+  <text x="36" y="46" font-size="23" font-weight="600" fill="#111827">kappa-box 语义架构纵深</text>
+  <text x="36" y="72" font-size="13" fill="#5b6470">设计稿 2026-09-11 · 未实现 · 层是语义职责，不是部署单元；从上往下是「谁在声明」，从下往上是「什么算事实」</text>
+
+  <!-- 左侧：请求下行 -->
+  <line x1="20" y1="100" x2="20" y2="786" stroke="#5b6470" stroke-width="1.5" marker-end="url(#arrow-down)"/>
+  <text transform="rotate(-90 18 443)" x="18" y="443" font-size="11.5" fill="#5b6470" text-anchor="middle">请求下行：只带 profile id 与 spec（无宿主命令 / 无宿主路径 / 无引擎 socket）</text>
+
+  <!-- 右侧：事实上行 -->
+  <line x1="1228" y1="786" x2="1228" y2="100" stroke="#2f6f4f" stroke-width="1.5" marker-end="url(#arrow-up)"/>
+  <text transform="rotate(90 1216 443)" x="1216" y="443" font-size="11.5" fill="#2f6f4f" text-anchor="middle">事实上行：⑦⑧⑨ 的生效值 → facts → 与期望比对 → digest 进 receipt</text>
+
+  <!-- 分组括号 -->
+  <rect x="36" y="98" width="260" height="230" rx="12" fill="#e8f0fb"/>
+  <rect x="36" y="98" width="4" height="230" rx="2" fill="#7aa7d9"/>
+  <text x="58" y="200" font-size="14" font-weight="600" fill="#1f3b5c">声明与契约</text>
+  <text x="58" y="220" font-size="12" fill="#33506e">可写错、可漂移</text>
+  <text x="58" y="238" font-size="12" fill="#33506e">不产生隔离事实</text>
+
+  <rect x="36" y="332" width="260" height="152" rx="12" fill="#fdf4e3"/>
+  <rect x="36" y="332" width="4" height="152" rx="2" fill="#d9a441"/>
+  <text x="58" y="398" font-size="14" font-weight="600" fill="#6b4a09">登记与路由</text>
+  <text x="58" y="418" font-size="12" fill="#7a5a17">需要现场验证</text>
+  <text x="58" y="436" font-size="12" fill="#7a5a17">登记表会与现实脱节</text>
+
+  <rect x="36" y="488" width="260" height="152" rx="12" fill="#e9f6ec"/>
+  <rect x="36" y="488" width="4" height="152" rx="2" fill="#5aa06b"/>
+  <text x="58" y="554" font-size="14" font-weight="600" fill="#1f4a2c">强制层</text>
+  <text x="58" y="574" font-size="12" fill="#2f5a3d">宿主上真实生效</text>
+  <text x="58" y="592" font-size="12" fill="#2f5a3d">⑦ 不可由上层伪造</text>
+
+  <rect x="36" y="644" width="260" height="152" rx="12" fill="#eef1f4"/>
+  <rect x="36" y="644" width="4" height="152" rx="2" fill="#98a2ad"/>
+  <text x="58" y="710" font-size="14" font-weight="600" fill="#39414b">执行层</text>
+  <text x="58" y="730" font-size="12" fill="#4b545f">⑧ 在宿主侧启动</text>
+  <text x="58" y="748" font-size="12" fill="#4b545f">⑨ 是被约束对象</text>
+
+  <!-- 九层 -->
+  <g>
+    <rect x="316" y="104" width="600" height="62" rx="10" fill="#e8f0fb" stroke="#7aa7d9"/>
+    <text x="336" y="132" font-size="15" font-weight="600" fill="#1f3b5c">① 评估语义</text>
+    <text x="336" y="152" font-size="12" fill="#33506e">claim / baseline / task / oracle / receipt · 结论可能错，但不构成隔离声明</text>
+
+    <rect x="316" y="182" width="600" height="62" rx="10" fill="#e8f0fb" stroke="#7aa7d9"/>
+    <text x="336" y="210" font-size="15" font-weight="600" fill="#1f3b5c">② 隔离契约</text>
+    <text x="336" y="230" font-size="12" fill="#33506e">profile 预注册枚举 · 策略与采集调用面 · 请求方塞不进任意命令</text>
+
+    <rect x="316" y="260" width="600" height="62" rx="10" fill="#e8f0fb" stroke="#7aa7d9"/>
+    <text x="336" y="288" font-size="15" font-weight="600" fill="#1f3b5c">③ SDK 面</text>
+    <text x="336" y="308" font-size="12" fill="#33506e">幂等 create · 事件就绪 · exec / session · stage / collect · stop / delete</text>
+
+    <rect x="316" y="338" width="600" height="62" rx="10" fill="#fdf4e3" stroke="#d9a441"/>
+    <text x="336" y="366" font-size="15" font-weight="600" fill="#6b4a09">④ resolver + profile registry</text>
+    <text x="336" y="386" font-size="12" fill="#7a5a17">&lt;host-class&gt;:&lt;tier&gt;[@variant] · acceptance · 期望 facts</text>
+
+    <rect x="316" y="416" width="600" height="62" rx="10" fill="#fdf4e3" stroke="#d9a441"/>
+    <text x="336" y="444" font-size="15" font-weight="600" fill="#6b4a09">⑤ 宿主服务（每宿主一个）</text>
+    <text x="336" y="464" font-size="12" fill="#7a5a17">生命周期唯一所有者 · 审计事件 · pin 账本</text>
+
+    <rect x="316" y="494" width="600" height="62" rx="10" fill="#e9f6ec" stroke="#5aa06b"/>
+    <text x="336" y="522" font-size="15" font-weight="600" fill="#1f4a2c">⑥ 沙箱控制面</text>
+    <text x="336" y="542" font-size="12" fill="#2f5a3d">gateway（宿主侧）+ supervisor（实例内）· 策略交付 · 凭据注入 · 代理出站 · relay</text>
+
+    <rect x="316" y="572" width="600" height="62" rx="10" fill="#e9f6ec" stroke="#5aa06b"/>
+    <text x="336" y="600" font-size="15" font-weight="600" fill="#1f4a2c">⑦ 内核强制</text>
+    <text x="336" y="620" font-size="12" fill="#2f5a3d">Landlock · seccomp · cgroup · namespace（Windows 上发生在 WSL2 内核）</text>
+
+    <rect x="316" y="650" width="600" height="62" rx="10" fill="#eef1f4" stroke="#98a2ad"/>
+    <text x="336" y="678" font-size="15" font-weight="600" fill="#39414b">⑧ 执行层</text>
+    <text x="336" y="698" font-size="12" fill="#4b545f">OCI(runc) · runsc · microVM guest · runtime 名称不证明策略已生效</text>
+
+    <rect x="316" y="728" width="600" height="62" rx="10" fill="#eef1f4" stroke="#98a2ad"/>
+    <text x="336" y="756" font-size="15" font-weight="600" fill="#39414b">⑨ 实例与负载</text>
+    <text x="336" y="776" font-size="12" fill="#4b545f">agent 进程 / 候选代码 · 完全不可信 · supervisor 同驻实例内</text>
+  </g>
+
+  <!-- 层间连接 -->
+  <g stroke="#5b6470" stroke-width="1.4" marker-end="url(#arrow-down)">
+    <line x1="616" y1="166" x2="616" y2="180"/>
+    <line x1="616" y1="244" x2="616" y2="258"/>
+    <line x1="616" y1="322" x2="616" y2="336"/>
+    <line x1="616" y1="400" x2="616" y2="414"/>
+    <line x1="616" y1="478" x2="616" y2="492"/>
+    <line x1="616" y1="556" x2="616" y2="570"/>
+    <line x1="616" y1="634" x2="616" y2="648"/>
+    <line x1="616" y1="712" x2="616" y2="726"/>
+  </g>
+
+  <!-- 实例边界 -->
+  <rect x="308" y="720" width="616" height="78" rx="14" fill="none" stroke="#b03a3a" stroke-width="1.5" stroke-dasharray="7 5"/>
+  <text x="944" y="748" font-size="13" font-weight="600" fill="#b03a3a">实例边界</text>
+  <text x="944" y="768" font-size="12" fill="#8c3b3b">supervisor 与负载在实例内</text>
+  <text x="944" y="786" font-size="12" fill="#8c3b3b">其余各层在宿主侧</text>
+
+  <!-- 右侧注释与连线 -->
+  <rect x="944" y="104" width="256" height="62" rx="10" fill="#e8f0fb" stroke="#7aa7d9" stroke-dasharray="5 4"/>
+  <text x="960" y="128" font-size="13" font-weight="600" fill="#1f3b5c">同一 digest 进入证据记录</text>
+  <text x="960" y="148" font-size="11.5" fill="#33506e">isolation.runtimeFactsDigest</text>
+  <line x1="944" y1="135" x2="922" y2="135" stroke="#7aa7d9" stroke-width="1.4" stroke-dasharray="4 4" marker-end="url(#arrow-side)"/>
+
+  <rect x="944" y="416" width="256" height="62" rx="10" fill="#fdf4e3" stroke="#d9a441" stroke-dasharray="5 4"/>
+  <text x="960" y="440" font-size="13" font-weight="600" fill="#6b4a09">与期望 facts 比对</text>
+  <text x="960" y="460" font-size="11.5" fill="#7a5a17">不一致 → 拒绝，不降级</text>
+  <line x1="944" y1="447" x2="922" y2="447" stroke="#d9a441" stroke-width="1.4" stroke-dasharray="4 4" marker-end="url(#arrow-side)"/>
+
+  <rect x="944" y="560" width="256" height="140" rx="10" fill="#e9f6ec" stroke="#5aa06b" stroke-dasharray="5 4"/>
+  <text x="960" y="584" font-size="13" font-weight="600" fill="#1f4a2c">facts 采集点</text>
+  <text x="960" y="606" font-size="11.5" fill="#2f5a3d">内核 / LSM · Landlock ABI</text>
+  <text x="960" y="624" font-size="11.5" fill="#2f5a3d">引擎 · runtime · 镜像 digest</text>
+  <text x="960" y="642" font-size="11.5" fill="#2f5a3d">cgroup 生效限额 · 网络 profile</text>
+  <text x="960" y="664" font-size="11.5" fill="#2f5a3d">⑨ 的行为经采集通道回传</text>
+  <line x1="944" y1="592" x2="922" y2="592" stroke="#5aa06b" stroke-width="1.4" stroke-dasharray="4 4" marker-end="url(#arrow-side)"/>
+  <line x1="944" y1="681" x2="922" y2="681" stroke="#5aa06b" stroke-width="1.4" stroke-dasharray="4 4" marker-end="url(#arrow-side)"/>
+
+  <!-- 图例 -->
+  <line x1="36" y1="836" x2="1204" y2="836" stroke="#e3e8ee" stroke-width="1"/>
+  <g font-size="12.5" fill="#4a5560">
+    <rect x="36" y="856" width="18" height="12" rx="3" fill="#e8f0fb" stroke="#7aa7d9"/>
+    <text x="62" y="866">声明与契约</text>
+    <rect x="196" y="856" width="18" height="12" rx="3" fill="#fdf4e3" stroke="#d9a441"/>
+    <text x="222" y="866">登记与路由</text>
+    <rect x="356" y="856" width="18" height="12" rx="3" fill="#e9f6ec" stroke="#5aa06b"/>
+    <text x="382" y="866">强制层</text>
+    <rect x="496" y="856" width="18" height="12" rx="3" fill="#eef1f4" stroke="#98a2ad"/>
+    <text x="522" y="866">执行层</text>
+    <text x="36" y="898">声明层可以漂移；只有 ⑦ 与 ⑧ 的生效值构成隔离事实。任一层无法兑现所需语义时返回拒绝，不降级。</text>
+    <text x="36" y="918">Windows 上 ⑦ 发生在 WSL2 内核（不是 Windows 内核）；⑧ 由引擎在宿主侧启动，实例内只保留 supervisor 与负载。</text>
+  </g>
+</svg>

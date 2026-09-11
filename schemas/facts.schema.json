@@ -1,0 +1,287 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kappa-box.invalid/schemas/facts.schema.json",
+  "title": "kappa-box runtime facts v1",
+  "description": "Facts observed from the host and sandbox runtime. This schema records observations; it does not grant profile acceptance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sandboxId",
+    "profileId",
+    "kernel",
+    "lsm",
+    "landlock",
+    "seccomp",
+    "cgroup",
+    "runtime",
+    "image",
+    "network",
+    "time"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "1"},
+    "sandboxId": {"$ref": "#/$defs/sandboxId"},
+    "profileId": {"$ref": "#/$defs/profileId"},
+    "kernel": {"$ref": "#/$defs/kernel"},
+    "lsm": {"$ref": "#/$defs/lsm"},
+    "landlock": {"$ref": "#/$defs/landlock"},
+    "seccomp": {"$ref": "#/$defs/seccomp"},
+    "cgroup": {"$ref": "#/$defs/cgroup"},
+    "runtime": {"$ref": "#/$defs/runtime"},
+    "image": {"$ref": "#/$defs/image"},
+    "network": {"$ref": "#/$defs/network"},
+    "time": {"$ref": "#/$defs/time"}
+  },
+  "$defs": {
+    "canonicalFacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "profileId",
+        "kernel",
+        "lsm",
+        "landlock",
+        "seccomp",
+        "cgroup",
+        "runtime",
+        "image",
+        "network"
+      ],
+      "properties": {
+        "schemaVersion": {"const": "1"},
+        "profileId": {"$ref": "#/$defs/profileId"},
+        "kernel": {"$ref": "#/$defs/kernel"},
+        "lsm": {"$ref": "#/$defs/lsm"},
+        "landlock": {"$ref": "#/$defs/landlock"},
+        "seccomp": {"$ref": "#/$defs/seccomp"},
+        "cgroup": {"$ref": "#/$defs/canonicalCgroup"},
+        "runtime": {"$ref": "#/$defs/runtime"},
+        "image": {"$ref": "#/$defs/canonicalImage"},
+        "network": {"$ref": "#/$defs/network"}
+      }
+    },
+    "sandboxId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "profileId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*:(?:l[123]|managed|obs)(?:@[a-z0-9][a-z0-9._-]*)?$"
+    },
+    "kernel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "lsm": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1, "maxLength": 64},
+      "uniqueItems": true
+    },
+    "landlock": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "abi", "compatibility"],
+          "properties": {
+            "enabled": {"const": true},
+            "abi": {"type": "integer", "minimum": 1},
+            "compatibility": {"enum": ["hard_requirement", "best_effort"]}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "abi", "compatibility"],
+          "properties": {
+            "enabled": {"const": false},
+            "abi": {"type": "null"},
+            "compatibility": {"const": "best_effort"}
+          }
+        }
+      ]
+    },
+    "seccomp": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "profile"],
+          "properties": {
+            "enabled": {"const": true},
+            "profile": {"type": "string", "minLength": 1, "maxLength": 256}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "profile"],
+          "properties": {
+            "enabled": {"const": false},
+            "profile": {"type": "null"}
+          }
+        }
+      ]
+    },
+    "canonicalCgroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "limits"],
+      "properties": {
+        "version": {"enum": ["v1", "v2", "unknown"]},
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cpu", "memory", "pids"],
+          "properties": {
+            "cpu": {"$ref": "#/$defs/effectiveCpuLimit"},
+            "memory": {"$ref": "#/$defs/effectiveMemoryLimit"},
+            "pids": {"$ref": "#/$defs/effectivePidsLimit"}
+          }
+        }
+      }
+    },
+    "canonicalImage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest"],
+      "properties": {
+        "digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+      }
+    },
+    "cgroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "path", "limits"],
+      "properties": {
+        "version": {"enum": ["v1", "v2", "unknown"]},
+        "path": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cpu", "memory", "pids"],
+          "properties": {
+            "cpu": {"$ref": "#/$defs/effectiveCpuLimit"},
+            "memory": {"$ref": "#/$defs/effectiveMemoryLimit"},
+            "pids": {"$ref": "#/$defs/effectivePidsLimit"}
+          }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engineVersion", "name", "version", "rootless"],
+      "properties": {
+        "engineVersion": {"type": "string", "minLength": 1, "maxLength": 128},
+        "name": {"type": "string", "minLength": 1, "maxLength": 128},
+        "version": {"type": "string", "minLength": 1, "maxLength": 128},
+        "rootless": {"type": "boolean"}
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference", "digest"],
+      "properties": {
+        "reference": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "egressPath"],
+      "properties": {
+        "profile": {"type": "string", "minLength": 1, "maxLength": 128},
+        "egressPath": {"type": "string", "minLength": 1, "maxLength": 512}
+      }
+    },
+    "time": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["collectedAt", "probeSuiteVersion"],
+      "properties": {
+        "collectedAt": {"type": "string", "format": "date-time"},
+        "probeSuiteVersion": {"type": "string", "minLength": 1, "maxLength": 128}
+      }
+    },
+    "effectiveCpuLimit": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "value", "unit"],
+          "properties": {
+            "state": {"const": "enforced"},
+            "value": {"type": "number", "exclusiveMinimum": 0},
+            "unit": {"const": "cores"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "value", "unit"],
+          "properties": {
+            "state": {"enum": ["unlimited", "unavailable"]},
+            "value": {"type": "null"},
+            "unit": {"const": "cores"}
+          }
+        }
+      ]
+    },
+    "effectiveMemoryLimit": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "value", "unit"],
+          "properties": {
+            "state": {"const": "enforced"},
+            "value": {"type": "integer", "minimum": 1},
+            "unit": {"const": "bytes"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "value", "unit"],
+          "properties": {
+            "state": {"enum": ["unlimited", "unavailable"]},
+            "value": {"type": "null"},
+            "unit": {"const": "bytes"}
+          }
+        }
+      ]
+    },
+    "effectivePidsLimit": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "value", "unit"],
+          "properties": {
+            "state": {"const": "enforced"},
+            "value": {"type": "integer", "minimum": 1},
+            "unit": {"const": "count"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "value", "unit"],
+          "properties": {
+            "state": {"enum": ["unlimited", "unavailable"]},
+            "value": {"type": "null"},
+            "unit": {"const": "count"}
+          }
+        }
+      ]
+    }
+  }
+}

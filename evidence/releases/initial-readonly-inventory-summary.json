@@ -1,0 +1,85 @@
+{
+  "profileId": "wsl2:l1@openshell-docker",
+  "collectedAt": "2026-09-11T13:42:47.363132Z",
+  "acceptance": "unverified",
+  "probeStatus": "inventory_only",
+  "probeSuiteVersion": "0.1.0-inventory",
+  "sourceCommit": null,
+  "facts": null,
+  "factsDigest": null,
+  "pins": null,
+  "failureGroups": [],
+  "commands": [
+    {
+      "name": "wsl.version",
+      "argv": [
+        "wsl.exe",
+        "--version"
+      ],
+      "returncode": 0,
+      "timed_out": false
+    },
+    {
+      "name": "wsl.list",
+      "argv": [
+        "wsl.exe",
+        "-l",
+        "-v"
+      ],
+      "returncode": 0,
+      "timed_out": false
+    },
+    {
+      "name": "wsl.kernel",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "Ubuntu-24.04",
+        "--",
+        "uname",
+        "-r"
+      ],
+      "returncode": 0,
+      "timed_out": false
+    },
+    {
+      "name": "wsl.conf",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "Ubuntu-24.04",
+        "--",
+        "cat",
+        "/etc/wsl.conf"
+      ],
+      "returncode": 0,
+      "timed_out": false
+    },
+    {
+      "name": "docker.version",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "Ubuntu-24.04",
+        "--",
+        "docker",
+        "version"
+      ],
+      "returncode": 0,
+      "timed_out": false
+    },
+    {
+      "name": "docker.info",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "Ubuntu-24.04",
+        "--",
+        "docker",
+        "info"
+      ],
+      "returncode": 0,
+      "timed_out": false
+    }
+  ]
+}
