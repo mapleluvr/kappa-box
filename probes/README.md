@@ -2,15 +2,15 @@
 
 ## 当前状态
 
-首批探针只做 `wsl2:l1@openshell-docker` 的只读宿主盘点。它会记录 WSL、发行版、内核、配置和 Docker 信息，但不会改变宿主、创建沙箱、启动 gateway 或把 profile 标为可用。
+已对 `wsl2:l1@openshell-docker` 跑过只读宿主盘点，以及一次只读宿主隔离可见性探针（host 组）。两者都不会改变宿主、创建沙箱、启动 gateway 或把 profile 标为可用。
 
-`inventory_only` 结果的 `acceptance` 固定为 `unverified`。完整探针套件通过前不得写入 `verified`。
+`inventory_only` 与 `host_visibility` 的 `acceptance` 都固定为 `unverified`。host 组失败只写入证据记录的 `failureGroups`，不改仓库登记表。完整探针套件通过前不得写入 `verified`。
 
 ## 命令边界
 
 探针运行器只接受代码中固定的命令参数。发行版名经过单行校验，调用方不能追加 shell 片段、挂载参数、socket 或宿主路径。命令输出有大小上限，原始输出应保存在本地证据目录并按敏感信息规则处理。
 
-当前只读盘点命令：
+当前封闭命令表（发行版名锁 `Ubuntu-24.04`）：
 
 | 名称 | 命令形状 | 目的 |
 | --- | --- | --- |
@@ -20,8 +20,24 @@
 | `wsl.conf` | `wsl.exe -d <固定发行版> -- cat /etc/wsl.conf` | automount、interop、systemd 配置 |
 | `docker.version` | `wsl.exe -d <固定发行版> -- docker version` | engine/client 版本 |
 | `docker.info` | `wsl.exe -d <固定发行版> -- docker info` | cgroup、runtime、storage 和资源能力盘点 |
+| `host.mountinfo` | `wsl.exe -d <固定发行版> -- cat /proc/self/mountinfo` | `/mnt/*`、drvfs 挂载 |
+| `host.interop` | `wsl.exe -d <固定发行版> -- cat /proc/sys/fs/binfmt_misc/WSLInterop` | interop 是否启用；缺文件视为关闭 |
+| `host.cgroup.controllers` | `... cat /sys/fs/cgroup/cgroup.controllers` | cpu/memory/pids 是否在 |
+| `host.cgroup.subtree` | `... cat /sys/fs/cgroup/cgroup.subtree_control` | 必须含 cpu、memory、pids；空值或缺项 fail closed |
+| `host.lsm` | `... cat /sys/kernel/security/lsm` | LSM 列表是否含 landlock |
+| `host.lsm.proc` | `... cat /proc/sys/kernel/lsm` | 上一命令失败时的只读回退 |
 
-这些命令只能证明盘点到的返回值，不能证明 Landlock、网络、路径别名、资源上限或快照已经被正确强制。
+`collect_readonly_inventory()` 仍只跑前 6 条，产出 `inventory_only`。host 组额外跑后 6 条，并在探针进程内对固定路径 `\\wsl$\Ubuntu-24.04` 做 `visible` / `missing` / `unreadable` 三态检查：不可读 fail closed，调用方不能改路径。`host.mountinfo` 输出被截断时 host 组失败。采集入口在 dirty worktree 上拒绝运行，`sourceCommit` 只写实际 commit id。
+
+复跑 host 组：
+
+```text
+PYTHONPATH=src python -m kappa_box host-visibility --profile wsl2:l1@openshell-docker
+```
+
+本机日常 `Ubuntu-24.04` 上的 host 组结果是 **fail**（关 automount/interop 的专用发行版尚未建立）。这是 fail-closed 证据，不是实现失败。脱敏摘要见 `evidence/releases/host-visibility-2026-09-11-summary.json`。
+
+这些命令只能证明读到的宿主可见性，不能证明 Landlock ABI、网络、bind/junction 对抗、资源上限或快照已经被正确强制。Docker Desktop socket 不在本封闭表内。
 
 ## 完整套件的分组
 

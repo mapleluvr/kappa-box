@@ -21,3 +21,6 @@ test = [
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-ra"
+
+[tool.pyright]
+extraPaths = ["src"]

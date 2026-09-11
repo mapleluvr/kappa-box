@@ -28,13 +28,13 @@ class CommandResult:
     stderr: str
     duration_ms: int
     timed_out: bool
+    truncated: bool = False
 
 
 class CommandExecutor(Protocol):
     def run(
         self, name: str, argv: tuple[str, ...], timeout_seconds: float
-    ) -> CommandResult:
-        pass
+    ) -> CommandResult: ...
 
 
 class SubprocessExecutor:
@@ -76,38 +76,50 @@ class SubprocessExecutor:
                 capture_output=True,
                 timeout=timeout_seconds,
             )
+            stdout, stdout_truncated = _bounded_text(
+                completed.stdout, self._max_output_bytes
+            )
+            stderr, stderr_truncated = _bounded_text(
+                completed.stderr, self._max_output_bytes
+            )
             return CommandResult(
                 name=name,
                 argv=argv,
                 returncode=completed.returncode,
-                stdout=_bounded_text(completed.stdout, self._max_output_bytes),
-                stderr=_bounded_text(completed.stderr, self._max_output_bytes),
+                stdout=stdout,
+                stderr=stderr,
                 duration_ms=_duration_ms(started),
                 timed_out=False,
+                truncated=stdout_truncated or stderr_truncated,
             )
         except (subprocess.TimeoutExpired, OSError) as error:
             if isinstance(error, subprocess.TimeoutExpired):
+                stdout, stdout_truncated = _bounded_text(
+                    _exception_output(error.stdout), self._max_output_bytes
+                )
+                stderr, stderr_truncated = _bounded_text(
+                    _exception_output(error.stderr), self._max_output_bytes
+                )
                 return CommandResult(
                     name=name,
                     argv=argv,
                     returncode=124,
-                    stdout=_bounded_text(
-                        _exception_output(error.stdout), self._max_output_bytes
-                    ),
-                    stderr=_bounded_text(
-                        _exception_output(error.stderr), self._max_output_bytes
-                    ),
+                    stdout=stdout,
+                    stderr=stderr,
                     duration_ms=_duration_ms(started),
                     timed_out=True,
+                    truncated=stdout_truncated or stderr_truncated,
                 )
+            stderr, stderr_truncated = _bounded_text(str(error), self._max_output_bytes)
             return CommandResult(
                 name=name,
                 argv=argv,
                 returncode=127,
                 stdout="",
-                stderr=_bounded_text(str(error), self._max_output_bytes),
+                stderr=stderr,
                 duration_ms=_duration_ms(started),
                 timed_out=False,
+                truncated=stderr_truncated,
             )
 
 
@@ -119,24 +131,30 @@ def _exception_output(data: bytes | str | None) -> bytes | str:
     return b"" if data is None else data
 
 
-def _bounded_text(data: bytes | str, max_bytes: int) -> str:
+def _bounded_text(data: bytes | str, max_bytes: int) -> tuple[str, bool]:
     if isinstance(data, bytes):
+        truncated = len(data) > max_bytes
         bounded = data[:max_bytes]
         if _looks_like_utf16le(bounded):
-            return bounded.decode("utf-16le", errors="replace")
-        return bounded.decode("utf-8", errors="replace")
-    return data.encode("utf-8")[:max_bytes].decode("utf-8", errors="replace")
+            return bounded.decode("utf-16le", errors="replace"), truncated
+        return bounded.decode("utf-8", errors="replace"), truncated
+    encoded = data.encode("utf-8")
+    truncated = len(encoded) > max_bytes
+    return encoded[:max_bytes].decode("utf-8", errors="replace"), truncated
 
 
 def _looks_like_utf16le(data: bytes) -> bool:
     return len(data) >= 2 and data[1::2].count(0) > len(data[1::2]) // 2
 
 
-def default_command_specs(distribution: str) -> tuple[CommandSpec, ...]:
-    """Return the fixed read-only inventory commands for one WSL distro."""
+def _validate_distribution_name(distribution: str) -> None:
     if not distribution or any(char in distribution for char in "\r\n"):
         raise ValueError("distribution must be a non-empty single-line name")
 
+
+def inventory_command_specs(distribution: str) -> tuple[CommandSpec, ...]:
+    """Return the original read-only inventory commands for one WSL distro."""
+    _validate_distribution_name(distribution)
     return (
         CommandSpec("wsl.version", ("wsl.exe", "--version")),
         CommandSpec("wsl.list", ("wsl.exe", "-l", "-v")),
@@ -157,6 +175,84 @@ def default_command_specs(distribution: str) -> tuple[CommandSpec, ...]:
             ("wsl.exe", "-d", distribution, "--", "docker", "info"),
         ),
     )
+
+
+def host_visibility_command_specs(distribution: str) -> tuple[CommandSpec, ...]:
+    """Return inventory commands plus closed host-isolation visibility commands."""
+    _validate_distribution_name(distribution)
+    return inventory_command_specs(distribution) + (
+        CommandSpec(
+            "host.mountinfo",
+            (
+                "wsl.exe",
+                "-d",
+                distribution,
+                "--",
+                "cat",
+                "/proc/self/mountinfo",
+            ),
+        ),
+        CommandSpec(
+            "host.interop",
+            (
+                "wsl.exe",
+                "-d",
+                distribution,
+                "--",
+                "cat",
+                "/proc/sys/fs/binfmt_misc/WSLInterop",
+            ),
+        ),
+        CommandSpec(
+            "host.cgroup.controllers",
+            (
+                "wsl.exe",
+                "-d",
+                distribution,
+                "--",
+                "cat",
+                "/sys/fs/cgroup/cgroup.controllers",
+            ),
+        ),
+        CommandSpec(
+            "host.cgroup.subtree",
+            (
+                "wsl.exe",
+                "-d",
+                distribution,
+                "--",
+                "cat",
+                "/sys/fs/cgroup/cgroup.subtree_control",
+            ),
+        ),
+        CommandSpec(
+            "host.lsm",
+            (
+                "wsl.exe",
+                "-d",
+                distribution,
+                "--",
+                "cat",
+                "/sys/kernel/security/lsm",
+            ),
+        ),
+        CommandSpec(
+            "host.lsm.proc",
+            (
+                "wsl.exe",
+                "-d",
+                distribution,
+                "--",
+                "cat",
+                "/proc/sys/kernel/lsm",
+            ),
+        ),
+    )
+
+
+def default_command_specs(distribution: str) -> tuple[CommandSpec, ...]:
+    """Return the full closed command table for the first WSL2 profile."""
+    return host_visibility_command_specs(distribution)
 
 
 def collect_readonly_inventory(
@@ -184,7 +280,7 @@ def collect_readonly_inventory(
         raise ValueError("executor distribution does not match registered distribution")
 
     commands = []
-    for spec in default_command_specs(distribution):
+    for spec in inventory_command_specs(distribution):
         command = executor.run(spec.name, spec.argv, spec.timeout_seconds)
         if command.name != spec.name or command.argv != spec.argv:
             raise ValueError(

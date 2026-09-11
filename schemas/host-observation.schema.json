@@ -1,0 +1,390 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kappa-box.invalid/schemas/host-observation.schema.json",
+  "title": "kappa-box host isolation visibility record v1",
+  "description": "Read-only host group observation for wsl2:l1@openshell-docker. This record never writes facts, pins, or profile acceptance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "profileId",
+    "collectedAt",
+    "acceptance",
+    "probeStatus",
+    "probeSuiteVersion",
+    "sourceCommit",
+    "facts",
+    "factsDigest",
+    "pins",
+    "failureGroups",
+    "groups",
+    "commands",
+    "observations"
+  ],
+  "properties": {
+    "profileId": {
+      "type": "string",
+      "const": "wsl2:l1@openshell-docker"
+    },
+    "collectedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "acceptance": {
+      "const": "unverified"
+    },
+    "probeStatus": {
+      "const": "host_visibility"
+    },
+    "probeSuiteVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "sourceCommit": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "facts": {
+      "type": "null"
+    },
+    "factsDigest": {
+      "type": "null"
+    },
+    "pins": {
+      "type": "null"
+    },
+    "failureGroups": {
+      "type": "array",
+      "maxItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "const": "host"
+      }
+    },
+    "groups": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "result", "reason"],
+        "properties": {
+          "name": {
+            "const": "host"
+          },
+          "result": {
+            "enum": ["pass", "fail"]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        }
+      }
+    },
+    "commands": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "argv", "returncode", "timed_out", "truncated"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "argv": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "maxLength": 4096
+            }
+          },
+          "returncode": {
+            "type": "integer"
+          },
+          "stdout": {
+            "type": "string"
+          },
+          "stderr": {
+            "type": "string"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "timed_out": {
+            "type": "boolean"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "observations": {
+      "$ref": "#/$defs/observations"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "groups": {
+            "contains": {
+              "type": "object",
+              "properties": {
+                "name": { "const": "host" },
+                "result": { "const": "fail" }
+              },
+              "required": ["name", "result"]
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "failureGroups": {
+            "minItems": 1,
+            "contains": { "const": "host" }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "failureGroups": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "observations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kernel",
+        "distro",
+        "wslConf",
+        "mounts",
+        "interop",
+        "cgroup",
+        "lsm",
+        "engine",
+        "wslShare"
+      ],
+      "properties": {
+        "kernel": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "distro": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "wslVersion",
+            "windowsVersion",
+            "state",
+            "siblings"
+          ],
+          "properties": {
+            "name": { "const": "Ubuntu-24.04" },
+            "wslVersion": {
+              "type": ["string", "null"],
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "windowsVersion": {
+              "type": ["string", "null"],
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "state": {
+              "type": ["string", "null"],
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "siblings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          }
+        },
+        "wslConf": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "systemd",
+            "automountEnabled",
+            "interopEnabled",
+            "presentKeys"
+          ],
+          "properties": {
+            "systemd": { "type": ["boolean", "null"] },
+            "automountEnabled": { "type": ["boolean", "null"] },
+            "interopEnabled": { "type": ["boolean", "null"] },
+            "presentKeys": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          }
+        },
+        "mounts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["windowsDriveMounts", "drvfsPresent"],
+          "properties": {
+            "windowsDriveMounts": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^/mnt/[a-zA-Z]$"
+              }
+            },
+            "drvfsPresent": { "type": "boolean" }
+          }
+        },
+        "interop": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["wslInteropFile", "enabled"],
+          "properties": {
+            "wslInteropFile": {
+              "enum": ["present", "missing", "unreadable"]
+            },
+            "enabled": { "type": ["boolean", "null"] }
+          }
+        },
+        "cgroup": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "controllers",
+            "subtreeControl",
+            "controllersReadable",
+            "subtreeReadable",
+            "driver",
+            "version"
+          ],
+          "properties": {
+            "controllers": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "subtreeControl": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "controllersReadable": { "type": "boolean" },
+            "subtreeReadable": { "type": "boolean" },
+            "driver": {
+              "type": ["string", "null"],
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "version": {
+              "type": ["string", "null"],
+              "minLength": 1,
+              "maxLength": 16
+            }
+          }
+        },
+        "lsm": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["names", "landlockPresent", "source"],
+          "properties": {
+            "names": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "landlockPresent": { "type": "boolean" },
+            "source": {
+              "enum": ["host.lsm", "host.lsm.proc", null]
+            }
+          }
+        },
+        "engine": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "engineVersion",
+            "defaultRuntime",
+            "cgroupDriver",
+            "cgroupVersion",
+            "dockerRootDir"
+          ],
+          "properties": {
+            "engineVersion": {
+              "type": ["string", "null"],
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "defaultRuntime": {
+              "type": ["string", "null"],
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "cgroupDriver": {
+              "type": ["string", "null"],
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "cgroupVersion": {
+              "type": ["string", "null"],
+              "minLength": 1,
+              "maxLength": 16
+            },
+            "dockerRootDir": {
+              "type": ["string", "null"],
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        },
+        "wslShare": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "visibility"],
+          "properties": {
+            "path": { "const": "\\\\wsl$\\Ubuntu-24.04" },
+            "visibility": {
+              "enum": ["visible", "missing", "unreadable"]
+            }
+          }
+        }
+      }
+    }
+  }
+}

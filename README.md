@@ -1,6 +1,6 @@
 # kappa-box
 
-> 状态：设计稿与初始实现（2026-09-11）。核心服务尚未实现，完整 profile 尚未验证；已完成 facts/profile v1 合同、只读盘点探针脚手架和一次本机盘点。
+> 状态：设计稿与初始实现（2026-09-11）。核心服务尚未实现，完整 profile 尚未验证；已完成 facts/profile v1 合同、只读盘点和一次本机 host 组可见性探针。日常 `Ubuntu-24.04` 上 host 组为 fail，登记表仍为 `unverified`。
 
 kappa-box 是 kappa 自有的**多沙箱隔离基础设施**：为 benchmark / 评估运行提供一次性或长期存活的
 隔离实例，并如实报告这些实例的隔离事实。它只负责「执行位置与它实际发生了什么」，
@@ -57,12 +57,15 @@ kappa-box/
 ├── README.md
 ├── schemas/
 │   ├── facts.schema.json
-│   └── profile.schema.json
+│   ├── profile.schema.json
+│   ├── inventory.schema.json
+│   └── host-observation.schema.json
 ├── profiles/
 │   └── registry/wsl2-l1-openshell-docker.json
 ├── src/kappa_box/
 │   ├── facts.py
-│   └── probes.py
+│   ├── probes.py
+│   └── host_probe.py
 ├── tests/
 │   ├── unit/
 │   └── contract/
@@ -133,7 +136,7 @@ profiles.inspect → sandboxes.create（幂等）→ waitReady → facts
 
 ## 9. 读这份文档时要注意
 
-- 本项目当前已执行一次**只读宿主盘点**；提交的脱敏摘要在 `evidence/releases/initial-readonly-inventory-summary.json`，其结构合同为 `schemas/inventory.schema.json`；本机原始结果在被忽略的 `evidence/probe-runs/initial-readonly-inventory.json`。这不等于沙箱隔离已验证。
+- 本项目当前已执行一次**只读宿主盘点**和一次 **host 组隔离可见性**探针。盘点脱敏摘要在 `evidence/releases/initial-readonly-inventory-summary.json`（`schemas/inventory.schema.json`）；host 组脱敏摘要在 `evidence/releases/host-visibility-2026-09-11-summary.json`（`schemas/host-observation.schema.json`）。本机原始结果在被忽略的 `evidence/probe-runs/`。host 组在日常 `Ubuntu-24.04` 上失败（automount/interop/`/mnt`/`\\wsl$`/LSM 不可读），这不等于专用发行版已建立，也不等于沙箱隔离已验证。登记 profile 仍为 `unverified` / `never_run`。
 - 完整探针套件仍是待执行项。任何「可用」「已验证」的说法在拿到完整探针输出之前都是声明。
 - facts 与 profile 的 v1 机器可读合同见 `schemas/`，规范化与 digest 决定见 `docs/decisions/0001-facts-contract.md`。
 - 上游 OpenShell 处于快速迭代（日更量级发布），因此本目录的版本相关陈述都标注了观察时间；

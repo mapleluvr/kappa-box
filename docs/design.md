@@ -1,6 +1,6 @@
 # kappa-box 设计
 
-> 状态：设计稿与初始实现（2026-09-11）。核心服务和完整 vertical slice 尚未实现；已完成 facts/profile v1 合同、只读盘点探针脚手架和一次本机盘点。本文是 kappa-box 的主设计：需求、技术栈、
+> 状态：设计稿与初始实现（2026-09-11）。核心服务和完整 vertical slice 尚未实现；已完成 facts/profile v1 合同、只读盘点和一次本机 host 组可见性探针。本文是 kappa-box 的主设计：需求、技术栈、
 > 宿主归属与边界。接口形状见 [interface.md](interface.md)，流程见 [flows.md](flows.md)，
 > 语义分层见 [semantic-architecture.md](semantic-architecture.md)，依据与事实边界见 [evidence.md](evidence.md)。
 
@@ -40,8 +40,9 @@ kappa-box 为评估运行提供**沙箱实例与它们的实际隔离事实**：
 deny-by-default 协议级出站 + 凭据注入 + driver 级资源限额」的现成 runtime；本机也能看到该组合的
 运行痕迹（一个参照集成的网关进程与缓存的安装包，见 [evidence.md](evidence.md) §4）。
 **kappa-box 自己尚未跑过完整沙箱 runtime 路径。** 已执行的只读宿主盘点脱敏摘要见
-`evidence/releases/initial-readonly-inventory-summary.json`；原始结果只在执行工作区的
-`evidence/probe-runs/initial-readonly-inventory.json`，不会随仓库提交；它不构成 profile 可用性或隔离强制证明。
+`evidence/releases/initial-readonly-inventory-summary.json`；host 组可见性脱敏摘要见
+`evidence/releases/host-visibility-2026-09-11-summary.json`。原始结果只在执行工作区的
+`evidence/probe-runs/`，不会随仓库提交。日常发行版上 host 组失败，不构成 profile 可用性或隔离强制证明。
 
 **必须同时固定的一条**：把 `landlock.compatibility` 固定为 `hard_requirement`。
 上游默认值 `best_effort` 的语义是「警告并继续、不启用 Landlock」，与 R3 的 fail-closed 直接冲突。

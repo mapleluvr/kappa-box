@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,6 +13,8 @@ from kappa_box.probes import (
     _bounded_text,
     collect_readonly_inventory,
     default_command_specs,
+    host_visibility_command_specs,
+    inventory_command_specs,
 )
 from kappa_box.profile import validate_profile_identity
 
@@ -34,6 +37,7 @@ class FakeExecutor:
             stderr=recorded.stderr,
             duration_ms=recorded.duration_ms,
             timed_out=recorded.timed_out,
+            truncated=recorded.truncated,
         )
 
 
@@ -95,13 +99,14 @@ def test_registry_profile_identity_is_valid():
 
 
 def test_bounded_text_decodes_utf16le_output_from_wsl():
-    assert (
-        _bounded_text("WSL 2.7.11.0\r\n".encode("utf-16le"), 1024) == "WSL 2.7.11.0\r\n"
+    assert _bounded_text("WSL 2.7.11.0\r\n".encode("utf-16le"), 1024) == (
+        "WSL 2.7.11.0\r\n",
+        False,
     )
 
 
 def test_inventory_uses_only_fixed_read_only_commands():
-    specs = default_command_specs("Ubuntu-24.04")
+    specs = inventory_command_specs("Ubuntu-24.04")
     executor = FakeExecutor({spec.name: result(spec.name) for spec in specs})
 
     inventory = collect_readonly_inventory(
@@ -178,7 +183,7 @@ def test_subprocess_executor_bounds_os_error_output(monkeypatch):
 
 
 def test_inventory_retains_command_failures_without_claiming_profile_failure():
-    specs = default_command_specs("Ubuntu-24.04")
+    specs = inventory_command_specs("Ubuntu-24.04")
     results = {
         spec.name: result(
             spec.name,
@@ -214,7 +219,7 @@ def test_inventory_retains_command_failures_without_claiming_profile_failure():
 
 
 def test_inventory_rejects_non_registered_distribution():
-    specs = default_command_specs("Ubuntu-24.04")
+    specs = inventory_command_specs("Ubuntu-24.04")
     executor = FakeExecutor({spec.name: result(spec.name) for spec in specs})
 
     with pytest.raises(ValueError, match="registered distribution"):
@@ -241,3 +246,95 @@ def test_subprocess_executor_rejects_commands_outside_fixed_registry():
 
     with pytest.raises(ValueError, match="not registered"):
         executor.run("arbitrary", ("sh", "-c", "echo unsafe"), 30.0)
+
+
+def test_closed_table_registers_host_visibility_commands_with_fixed_argv():
+    inventory_names = [spec.name for spec in inventory_command_specs("Ubuntu-24.04")]
+    host_specs = host_visibility_command_specs("Ubuntu-24.04")
+    by_name = {spec.name: spec.argv for spec in host_specs}
+
+    assert inventory_names == [
+        "wsl.version",
+        "wsl.list",
+        "wsl.kernel",
+        "wsl.conf",
+        "docker.version",
+        "docker.info",
+    ]
+    assert default_command_specs("Ubuntu-24.04") == host_specs
+    assert by_name["host.mountinfo"] == (
+        "wsl.exe",
+        "-d",
+        "Ubuntu-24.04",
+        "--",
+        "cat",
+        "/proc/self/mountinfo",
+    )
+    assert by_name["host.interop"] == (
+        "wsl.exe",
+        "-d",
+        "Ubuntu-24.04",
+        "--",
+        "cat",
+        "/proc/sys/fs/binfmt_misc/WSLInterop",
+    )
+    assert by_name["host.cgroup.controllers"][-1] == "/sys/fs/cgroup/cgroup.controllers"
+    assert by_name["host.cgroup.subtree"][-1] == "/sys/fs/cgroup/cgroup.subtree_control"
+    assert by_name["host.lsm"][-1] == "/sys/kernel/security/lsm"
+    assert by_name["host.lsm.proc"][-1] == "/proc/sys/kernel/lsm"
+
+
+def test_subprocess_executor_rejects_tampered_host_visibility_argv():
+    executor = SubprocessExecutor()
+    registered = next(
+        spec
+        for spec in host_visibility_command_specs("Ubuntu-24.04")
+        if spec.name == "host.mountinfo"
+    )
+
+    with pytest.raises(ValueError, match="not registered"):
+        executor.run(
+            registered.name,
+            registered.argv[:-1] + ("/etc/passwd",),
+            registered.timeout_seconds,
+        )
+
+
+def test_subprocess_executor_records_truncated_output(monkeypatch):
+    from kappa_box import probes
+
+    def fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(
+            args=("wsl.exe", "--version"),
+            returncode=0,
+            stdout=b"x" * 100,
+            stderr=b"",
+        )
+
+    monkeypatch.setattr(probes.subprocess, "run", fake_run)
+    result = SubprocessExecutor(max_output_bytes=16).run(
+        "wsl.version", ("wsl.exe", "--version"), 30.0
+    )
+
+    assert result.truncated is True
+    assert len(result.stdout.encode("utf-8")) <= 16
+
+
+def test_subprocess_executor_records_untruncated_output(monkeypatch):
+    from kappa_box import probes
+
+    def fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(
+            args=("wsl.exe", "--version"),
+            returncode=0,
+            stdout=b"ok\n",
+            stderr=b"",
+        )
+
+    monkeypatch.setattr(probes.subprocess, "run", fake_run)
+    result = SubprocessExecutor(max_output_bytes=64).run(
+        "wsl.version", ("wsl.exe", "--version"), 30.0
+    )
+
+    assert result.truncated is False
+    assert result.stdout == "ok\n"

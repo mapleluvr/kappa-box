@@ -1,6 +1,6 @@
 # profile 登记、探针与 pin
 
-> 状态：设计稿与初始实现（2026-09-11）。已完成 profile/facts v1 schema、只读盘点脚手架和一次本机盘点；完整 profile 仍未验证。本文定义「一条 profile 是什么、怎么变成可用」。
+> 状态：设计稿与初始实现（2026-09-11）。已完成 profile/facts v1 schema、只读盘点和一次本机 host 组可见性探针；完整 profile 仍未验证。本文定义「一条 profile 是什么、怎么变成可用」。
 > 需求见 [design.md](design.md) §2，纵深与拒绝语义见 [semantic-architecture.md](semantic-architecture.md)。
 
 ## 1. 一条 profile 由什么组成
@@ -53,9 +53,10 @@ l2 的 runtime 选择本身是未决项：同一发行版内可选 runsc（轻�
 
 ## 4. 探针套件
 
-探针把「候选 profile」变成「已登记事实」。当前已经运行只读宿主盘点，提交的脱敏摘要见
-`evidence/releases/initial-readonly-inventory-summary.json`；原始结果仅在执行工作区的
-`evidence/probe-runs/initial-readonly-inventory.json`，不会随仓库提交。它只产生 `unverified` / `inventory_only`，不代表完整套件通过。
+探针把「候选 profile」变成「已登记事实」。当前已经运行只读宿主盘点，以及一次 host 组隔离可见性探针。盘点脱敏摘要见
+`evidence/releases/initial-readonly-inventory-summary.json`；host 组脱敏摘要见
+`evidence/releases/host-visibility-2026-09-11-summary.json`。原始结果只留在执行工作区的
+`evidence/probe-runs/`，不会随仓库提交。盘点产生 `unverified` / `inventory_only`；host 组产生 `unverified` / `host_visibility`，本机日常发行版上 host 组为 fail。两者都不代表完整套件通过，也不把登记表写成 `verified` 或 `failed`。
 其余检查仍为待执行项；拒绝即该 profile 不可用，不降级。
 
 | 组 | 探针 | 通过 | 拒绝 |

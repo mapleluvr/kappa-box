@@ -93,6 +93,9 @@
           },
           "timed_out": {
             "type": "boolean"
+          },
+          "truncated": {
+            "type": "boolean"
           }
         }
       }
