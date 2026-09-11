@@ -4,7 +4,7 @@
   "acceptance": "unverified",
   "probeStatus": "inventory_only",
   "probeSuiteVersion": "0.1.0-inventory",
-  "sourceCommit": null,
+  "sourceCommit": "b36ca99",
   "facts": null,
   "factsDigest": null,
   "pins": null,
