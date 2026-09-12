@@ -24,7 +24,7 @@
 - **delegate / scout**：`Mapleluv/grok-4.6:xhigh` → `Mapleluv/deepseek-flash:max`
 - **Oracle**：仅使用 `Mapleluv/gpt-6-astra:max`，不得替换为其它模型。
 
-派发 Subagent 时禁止设置任何意义上的时限。不得传递 `timeoutMs`、`maxRuntimeMs`、`toolTimeoutMs`、等待窗口、截止时间、运行期限或其它等价的时间限制参数；让 Subagent 自主运行至完成、明确失败或需要人工介入。
+派发 Subagent 时统一设置 90 分钟时限，必须传入 `timeoutMs: 5400000`（90 分钟）。不得设置更短的 `maxRuntimeMs`、`toolTimeoutMs`、等待窗口、截止时间、运行期限或其它等价时间限制；其它同类时限参数如确需传递，也必须使用 90 分钟。
 
 ## 变更与验证
 
