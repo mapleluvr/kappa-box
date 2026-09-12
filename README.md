@@ -1,6 +1,6 @@
 # kappa-box
 
-> 状态：设计稿与初始实现（2026-09-11）。核心服务尚未实现，完整 profile 尚未验证；已完成 facts/profile v1 合同、只读盘点、Landlock ABI 能力探针和专用 WSL2 发行版配置。专用发行版的 host 可见性仍需 clean probe 复核，登记表仍为 `unverified`。
+> 状态：设计稿与初始实现（2026-09-11）。核心服务尚未实现，完整 profile 尚未验证；已完成 facts/profile v1 合同、只读盘点、Landlock ABI 能力探针和专用 WSL2 发行版配置。2026-09-12 已在 clean commit `a24fcf1` 上完成专用发行版 host probe，但因 LSM 不可读和 `\\wsl$\\kappa-box-ubuntu-24.04` 可见而失败；登记表仍为 `unverified`。
 
 kappa-box 是 kappa 自有的**多沙箱隔离基础设施**：为 benchmark / 评估运行提供一次性或长期存活的
 隔离实例，并如实报告这些实例的隔离事实。它只负责「执行位置与它实际发生了什么」，

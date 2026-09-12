@@ -383,7 +383,7 @@ def _parse_lsm(primary: dict[str, Any], fallback: dict[str, Any]) -> dict[str, A
                 "landlockPresent": "landlock" in names,
                 "source": source,
             }
-    return {"names": [], "landlockPresent": False, "source": None}
+    return {"names": [], "landlockPresent": None, "source": None}
 
 
 def _parse_engine(

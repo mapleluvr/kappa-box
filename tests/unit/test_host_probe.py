@@ -293,7 +293,17 @@ def test_lsm_without_landlock_fails_host_group():
     assert "landlock" in host_group(record)["reason"]
 
 
-def test_visible_wsl_share_fails_host_group():
+def test_unreadable_lsm_sources_report_unknown_landlock_presence():
+    record, _checker = collect_daily()
+
+    assert record["observations"]["lsm"] == {
+        "names": [],
+        "landlockPresent": None,
+        "source": None,
+    }
+    assert host_group(record)["result"] == "fail"
+    assert "LSM list is unreadable" in host_group(record)["reason"]
+
     record, checker = collect_daily()
 
     assert checker.seen == [WSL_SHARE_PATH]

@@ -329,7 +329,7 @@
                 "maxLength": 64
               }
             },
-            "landlockPresent": { "type": "boolean" },
+            "landlockPresent": { "type": ["boolean", "null"] },
             "source": {
               "enum": ["host.lsm", "host.lsm.proc", null]
             }

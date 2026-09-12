@@ -95,6 +95,7 @@ def test_supported_landlock_abi_is_recorded_without_acceptance_claim():
     assert record["facts"] is None
     assert record["factsDigest"] is None
     assert record["pins"] is None
+    assert record["failureGroups"] == []
 
 
 def test_landlock_unsupported_errno_is_distinguished_from_unreadable():
@@ -107,7 +108,16 @@ def test_landlock_unsupported_errno_is_distinguished_from_unreadable():
     }
 
 
-def test_landlock_probe_fails_closed_on_unreadable_output():
+def test_landlock_unsupported_eopnotsupp_is_distinguished_from_unreadable():
+    record = collect(command_result(stdout="errno:95\n"))
+
+    assert record["capability"] == {
+        "status": "unsupported",
+        "abiVersion": None,
+        "error": "errno:95",
+    }
+    assert record["failureGroups"] == ["landlock"]
+
     record = collect(
         command_result(returncode=1, stdout="", stderr="python3: unavailable")
     )
