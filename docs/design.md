@@ -1,6 +1,6 @@
 # kappa-box 设计
 
-> 状态：设计稿与初始实现（2026-09-11）。核心服务和完整 vertical slice 尚未实现；已完成 facts/profile v1 合同、只读盘点、Landlock ABI 能力探针、专用 WSL2 发行版配置和一次专用发行版 host probe。本文是 kappa-box 的主设计：需求、技术栈、
+> 状态：设计稿与初始实现（2026-09-12）。核心服务尚未完整实现；已完成 facts/profile v1 合同、只读盘点、Landlock ABI 能力探针、专用 WSL2 发行版 host probe，以及首个真实 OpenShell + Docker runtime adapter/lifecycle vertical slice。完整 profile 仍未验证。
 > 宿主归属与边界。接口形状见 [interface.md](interface.md)，流程见 [flows.md](flows.md)，
 > 语义分层见 [semantic-architecture.md](semantic-architecture.md)，依据与事实边界见 [evidence.md](evidence.md)。
 
@@ -34,7 +34,8 @@ kappa-box 为评估运行提供**沙箱实例与它们的实际隔离事实**：
 
 ## 3. 技术栈与基底选择
 
-**已定（2026-09-11）**：Windows 侧以「OpenShell + Docker，跑在 WSL2 的专用发行版里」作为第一条路径。
+**已定（2026-09-12）**：Windows/WSL2 的真实 runtime adapter 已固定到 Docker Desktop 4.87.0 / Docker Engine 29.7.2、专用发行版 `kappa-box-ubuntu-24.04`、OpenShell 0.0.116 和官方 sandbox image digest。真实前置探查已通过 gateway JWT、Docker allocation、supervisor relay、network namespace、Landlock ruleset、exec、stop 和 delete。首个 vertical slice 的代码位于 `src/kappa_box/runtime.py` 与 `src/kappa_box/runtime_probe.py`，其 evidence 始终保持 `unverified`。Windows callback 端口发布和 plaintext gateway 只作为 host-side prerequisite，不能由调用方改变。实现决定记录见 [decisions/0002-openshell-docker-route.md](decisions/0002-openshell-docker-route.md)。
+
 
 理由：在调研到的方案里，它是唯一同时具备「Windows/WSL2 宿主声明 + 策略锁定文件系统 +
 deny-by-default 协议级出站 + 凭据注入 + driver 级资源限额」的现成 runtime；本机也能看到该组合的
@@ -46,6 +47,9 @@ deny-by-default 协议级出站 + 凭据注入 + driver 级资源限额」的现
 
 **必须同时固定的一条**：把 `landlock.compatibility` 固定为 `hard_requirement`。
 上游默认值 `best_effort` 的语义是「警告并继续、不启用 Landlock」，与 R3 的 fail-closed 直接冲突。
+
+**当前实现边界**：`runtime-vertical-slice` 只证明预注册 route 的生命周期与 exec 通道可调用；它不采集 facts、不改变 profile acceptance，也不证明 network、resource、filesystem、session 或稳定快照语义。上述行为必须由独立真实探针补齐。
+
 
 **第二路径**：同一发行版内准备一个 **L1 薄封装 profile**（标准 OCI 工具直连引擎）作为对照与后备，
 用于 OpenShell 无法兑现的语义（更强内核边界、独立的限额证据、逐实例快照）。不引入第二套管理器。

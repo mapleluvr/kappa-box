@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kappa-box.invalid/schemas/runtime-vertical-slice.schema.json",
+  "title": "kappa-box OpenShell Docker runtime vertical slice evidence v1",
+  "description": "Evidence that the registered Windows/WSL2 OpenShell Docker operation path was exercised; this record cannot assert profile verification.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "profileId",
+    "probeSuiteVersion",
+    "probeStatus",
+    "acceptance",
+    "sourceCommit",
+    "collectedAt",
+    "image",
+    "facts",
+    "factsDigest",
+    "pins",
+    "failureGroups",
+    "stages"
+  ],
+  "properties": {
+    "profileId": {
+      "const": "wsl2:l1@openshell-docker"
+    },
+    "probeSuiteVersion": {
+      "const": "0.1.0-runtime-vertical-slice"
+    },
+    "probeStatus": {
+      "const": "runtime_vertical_slice"
+    },
+    "acceptance": {
+      "const": "unverified"
+    },
+    "sourceCommit": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "collectedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "image": {
+      "type": "string",
+      "pattern": "^ghcr\\.io/nvidia/openshell-community/sandboxes/base@sha256:[a-f0-9]{64}$"
+    },
+    "facts": {
+      "type": "null"
+    },
+    "factsDigest": {
+      "type": "null"
+    },
+    "pins": {
+      "type": "null"
+    },
+    "failureGroups": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": ["runtime", "lifecycle", "channels"]
+      }
+    },
+    "stages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/stage"
+      }
+    }
+  },
+  "$defs": {
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status"],
+      "properties": {
+        "name": {
+          "enum": ["preflight", "create", "ready", "exec", "stop", "delete", "cleanup", "runtime"]
+        },
+        "status": {
+          "enum": ["pass", "fail", "skipped"]
+        },
+        "sandboxName": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*$"
+        },
+        "state": {
+          "enum": ["provisioning", "ready", "stopped", "failed", "deleted"]
+        },
+        "command": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "returncode": {
+          "type": "integer"
+        },
+        "stdout": {
+          "type": "string"
+        },
+        "stderr": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "error": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -30,8 +30,8 @@
 
 | # | 未决项 | 影响 | 需要什么才能定 |
 | --- | --- | --- | --- |
-| 8 | 宿主引擎取 Docker Desktop 还是发行版内 dockerd | 决定 OpenShell 接哪条 socket、谁启动 daemon；前者在上游支持矩阵内，后者是本机已验证组合 | 两条路径各跑一次宿主与策略探针 |
-| 9 | 是否自带独立网关实例，以及它与宿主上既有实例的隔离方式（state / PKI / 端口 / route） | 决定能否逐次运行持有网关 | 网关所有权与全局资源的探针结果 |
+| 8 | 宿主引擎取 Docker Desktop 还是发行版内 dockerd | **已收敛为 Docker Desktop daemon**：专用发行版通过 Docker Desktop WSL integration 访问 daemon；OpenShell 0.0.116 Docker driver 的 create/relay/enforcement/exec/stop/delete 已真实运行。发行版内 dockerd 保留为对照，不进入首个 registered route | 后续完整 host/resource/network probe |
+| 9 | 是否自带独立网关实例，以及它与宿主上既有实例的隔离方式（state / PKI / 端口 / route） | **首个切片已证明 gateway 可启动并服务真实 sandbox**；当前使用 host-side 独立配置、JWT、端口发布和 Docker callback。逐次运行的 state/PKI/端口隔离、mTLS 和所有权仍未定 | gateway ownership、PKI rotation、port collision 和 restart probes |
 | 10 | Linux 宿主上网关以 systemd user service 运行的所有权（linger、开机自启、日志归属） | 决定 Linux 侧运维规则 | 在真实 Linux 宿主上跑一次安装与重启探针 |
 | 11 | l2 的 runtime 选择：runsc（轻、版本旧）还是自备 nsjail（发行版索引里没有） | 决定 l2 的登记与成本 | 两者各跑一次 syscall / 文件边界探针 |
 | 12 | l3（microVM）是否必须：guest 侧文件与执行服务的成本 vs 威胁模型需要 | 决定是否投入 L3 | 候选是否需要抵御内核级逃逸的威胁模型判断 |
@@ -56,6 +56,7 @@
 ## 6. 推进顺序建议
 
 1. **§4 第 14 项已完成初版收敛**：facts schema 与 digest 投影写入 `schemas/` 和 `docs/decisions/0001-facts-contract.md`，并由 contract/unit tests 保护；真实探针仍需检验其可取得性；
-2. 再做 **§3 第 8 项**（引擎组合），用本机实际路径验证 OpenShell + 发行版内 dockerd 与 Docker Desktop 的差异；
-3. 再做 **§2 第 5 项**、**§3 第 11 项**——它们决定首版 profile 集合；
-4. 最后做 **§2 第 1、2 项**——登记权威与服务划分应当在有真实探针链路之后再定，避免先切服务再补理由。
+2. **§3 第 8 项已收敛为 Docker Desktop daemon**，首个真实 route 记录在 [decisions/0002-openshell-docker-route.md](decisions/0002-openshell-docker-route.md)；
+3. 下一步做完整的 **§4 第 16、17 项**、资源 / 网络 / 文件 / 通道 / 生命周期攻击探针，并补齐 gateway 所有权和 callback 端口的 host contract；
+4. 再做 **§2 第 5 项**、**§3 第 11 项**——它们决定首版 profile 集合；
+5. 最后做 **§2 第 1、2 项**——登记权威与服务划分应当在真实探针链路之后再定，避免先切服务再补理由。

@@ -147,6 +147,7 @@ kappa-box 对外提供实例操作面；对内，每次运行都被翻译成**�
 | `inspect <id>` | 展开宿主类别、引擎、runtime、限制栈、网络 profile、pin 账本、上次探针时间 |
 | `verify <id>` | 在目标宿主上重跑该 profile 的探针，写入 facts 与验收状态 |
 | `run …` | 实例操作面的命令行形式；参数经过同一套校验，不接受任意命令与任意挂载 |
+| `runtime-vertical-slice --profile <id> [--gateway-insecure]` | 真实运行首个 OpenShell + Docker 生命周期切片；只产生 `unverified` evidence，不修改 profile 验收 |
 
 语言绑定与传输方式（本地库 / 本地 socket / HTTP）**刻意未定**：先按操作面固定语义，
 绑定按使用方的语言与部署形态另定。

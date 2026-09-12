@@ -1,6 +1,6 @@
 # 语义架构纵深
 
-> 状态：说明文档（2026-09-11），对应已完成初始 facts/profile 合同和只读盘点、但尚未完成完整 runtime 的 [kappa-box](../README.md)。本文解释
+> 状态：说明文档（2026-09-12），对应已完成初始 facts/profile 合同、只读探针、专用 WSL2 host probe、Landlock ABI probe 和首个真实 OpenShell + Docker runtime adapter/lifecycle vertical slice；完整 runtime facts 与隔离套件仍未完成。
 > [纵深图](../diagrams/kappa-box-semantic-depth.svg) 的分层与不变量，不新增接口、不改变
 > [design.md](design.md) 的形态决定与 [interface.md](interface.md) 的边界。
 > 事实字段的定义见本文 §5，探针套件见 [profiles.md](profiles.md) §4，依据与证据边界见 [evidence.md](evidence.md)。
@@ -100,7 +100,17 @@ facts 是 ⑦ / ⑧ / ⑨ 的生效值加上 ⑤ 的实例身份。字段含义�
 - **边界**：宿主侧（①–⑧）是可信基础设施；实例内（⑨，以及 ⑥ 落在实例内的那部分：supervisor）
   是被约束对象。supervisor 虽然是受信代码，但它运行在实例的边界之内，它的强制能力最终仍由 ⑦ 决定。
 
-## 7. 未决
+## 8. Windows/WSL2 首个 runtime vertical slice
+
+Windows 路线的 adapter 现在固定使用 Docker Desktop daemon、专用 WSL2 发行版和 OpenShell Docker driver。
+`src/kappa_box/runtime.py` 只接受登记的 distribution、gateway endpoint、image digest 和 `/work` grant，
+将固定操作翻译为 WSL 内 OpenShell CLI 调用。`runtime-vertical-slice` 运行
+`preflight → create → ready → exec(id) → stop → delete`，并将真实 stdout/stderr 与脱敏阶段摘要分开保存。
+
+这条 slice 的结果仍是 route evidence，不是 facts：它证明了控制面和部分生命周期通道可以运行，不能替代
+network、resource、filesystem、session、snapshot、完整 facts 或 host hard gate 探针。`acceptance` 保持
+`unverified`，直到完整 evidence chain 通过。
+
 
 本文不重复列未决项。facts 字段集与规范化、`acceptance` 的失效条件、层 ⑥ 的版本如何映射到 facts、
 supervisor 的完整性取证，全部汇总在 [open-questions.md](open-questions.md)。

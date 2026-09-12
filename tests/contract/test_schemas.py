@@ -87,6 +87,11 @@ def landlock_validator() -> Draft202012Validator:
     return Draft202012Validator(schema, format_checker=FormatChecker())
 
 
+def runtime_vertical_slice_validator() -> Draft202012Validator:
+    schema = load_schema("runtime-vertical-slice.schema.json")
+    return Draft202012Validator(schema, format_checker=FormatChecker())
+
+
 def _landlock_record(*, status: str = "supported") -> dict:
     supported = status == "supported"
     return {
@@ -657,3 +662,22 @@ def test_profile_schema_rejects_verified_profile_without_probe_and_pins():
 
     assert any("pins" in error.json_path for error in errors)
     assert any("probe" in error.json_path for error in errors)
+
+
+def test_runtime_vertical_slice_schema_rejects_verified_acceptance():
+    record = {
+        "profileId": "wsl2:l1@openshell-docker",
+        "probeSuiteVersion": "0.1.0-runtime-vertical-slice",
+        "probeStatus": "runtime_vertical_slice",
+        "acceptance": "verified",
+        "sourceCommit": "abc1234",
+        "collectedAt": "2026-09-12T09:00:00Z",
+        "image": "ghcr.io/nvidia/openshell-community/sandboxes/base@sha256:" + "a" * 64,
+        "facts": None,
+        "factsDigest": None,
+        "pins": None,
+        "failureGroups": [],
+        "stages": [],
+    }
+
+    assert list(runtime_vertical_slice_validator().iter_errors(record))

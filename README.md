@@ -1,6 +1,6 @@
 # kappa-box
 
-> 状态：设计稿与初始实现（2026-09-11）。核心服务尚未实现，完整 profile 尚未验证；已完成 facts/profile v1 合同、只读盘点、Landlock ABI 能力探针和专用 WSL2 发行版配置。2026-09-12 已在 clean commit `cbc7891` 上完成专用发行版 host probe，但因 LSM 不可读和 `\\wsl$\\kappa-box-ubuntu-24.04` 可见而失败；登记表仍为 `unverified`。
+> 状态：初始 runtime vertical slice 已实现（2026-09-12），完整 profile 尚未验证；已完成 facts/profile v1 合同、只读盘点、Landlock ABI 能力探针、专用 WSL2 发行版配置和 OpenShell + Docker adapter。专用发行版 host 组仍因 LSM 不可读和 `\\wsl$\\kappa-box-ubuntu-24.04` 可见而失败；登记表保持 `unverified`。
 
 kappa-box 是 kappa 自有的**多沙箱隔离基础设施**：为 benchmark / 评估运行提供一次性或长期存活的
 隔离实例，并如实报告这些实例的隔离事实。它只负责「执行位置与它实际发生了什么」，
@@ -60,7 +60,8 @@ kappa-box/
 │   ├── profile.schema.json
 │   ├── inventory.schema.json
 │   ├── host-observation.schema.json
-│   └── landlock-capability.schema.json
+│   ├── landlock-capability.schema.json
+│   └── runtime-vertical-slice.schema.json
 ├── profiles/
 │   └── registry/wsl2-l1-openshell-docker.json
 ├── src/kappa_box/
@@ -68,9 +69,11 @@ kappa-box/
 │   ├── probes.py
 │   ├── host_probe.py
 │   ├── landlock_probe.py
+│   ├── runtime.py
+│   └── runtime_probe.py
 ├── tests/
-│   ├── unit/
-│   └── contract/
+│   ├── unit/          # runtime, probe and CLI behavior
+│   └── contract/      # JSON schema contracts
 ├── probes/
 │   └── README.md
 ├── evidence/

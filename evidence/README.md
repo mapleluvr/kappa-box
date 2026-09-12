@@ -6,6 +6,7 @@
 - `releases/`：经过审查和脱敏后，可随发布提交的 pin、facts digest 和验收索引。
 
 - 只读盘点与 host 组可见性都是完整探针之前的例外记录；Landlock ABI 能力使用独立的只读记录。三类记录都必须带 `probeSuiteVersion`、`sourceCommit`、固定命令和退出结果，明确写出 `facts`、`factsDigest`、`pins` 尚未采集；它们不能产生 `verified`。`sourceCommit` 必须来自干净 worktree 的实际 commit，不能把 dirty 标记写成发布证据。host 组命令要记录输出是否被截断；可以把 `failureGroups: ["host"]` 写进证据记录，但不能据此改仓库登记表的 `acceptance`。
+- 2026-09-12 已完成真实 OpenShell + Docker lifecycle vertical slice：Docker Desktop 4.87.0 / Engine 29.7.2 经专用发行版 WSL integration 被 OpenShell 0.0.116 gateway 使用；官方 sandbox image 成功完成 supervisor relay、network namespace、Landlock ABI 7 ruleset、非 root identity、exec、stop 和 delete。该结果支持“路线可以开始实现”，不产生 `verified`，不填 facts / factsDigest / pins。固定 evidence contract 见 `schemas/runtime-vertical-slice.schema.json`，release summary 只保留阶段元数据，原始 stdout/stderr 留在被忽略的 `evidence/probe-runs/`。
 
 ## 单次探针记录
 

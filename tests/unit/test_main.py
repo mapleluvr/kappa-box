@@ -73,6 +73,45 @@ def test_run_landlock_capability_writes_evidence(monkeypatch, tmp_path: Path):
     assert calls == ["collect", "write"]
 
 
+def test_run_runtime_vertical_slice_writes_evidence(monkeypatch, tmp_path: Path):
+    calls: list[str] = []
+    record = {
+        "profileId": "wsl2:l1@openshell-docker",
+        "probeSuiteVersion": "0.1.0-runtime-vertical-slice",
+        "probeStatus": "runtime_vertical_slice",
+        "acceptance": "unverified",
+        "sourceCommit": "clean-commit",
+        "collectedAt": "2026-09-12T09:00:00Z",
+        "image": "image@sha256:" + "a" * 64,
+        "facts": None,
+        "factsDigest": None,
+        "pins": None,
+        "failureGroups": [],
+        "stages": [],
+    }
+
+    monkeypatch.setattr(main_mod, "_ROOT", tmp_path)
+    monkeypatch.setattr(main_mod, "_source_commit", lambda root: "clean-commit")
+    monkeypatch.setattr(
+        main_mod,
+        "collect_runtime_vertical_slice",
+        lambda *args, **kwargs: calls.append("collect") or record,
+    )
+    monkeypatch.setattr(
+        main_mod,
+        "write_runtime_vertical_slice_evidence",
+        lambda *args, **kwargs: calls.append("write") or record,
+    )
+
+    assert (
+        main_mod.run_runtime_vertical_slice(
+            "wsl2:l1@openshell-docker", gateway_insecure=True
+        )
+        == 0
+    )
+    assert calls == ["collect", "write"]
+
+
 def test_run_host_visibility_does_not_collect_on_dirty_worktree(monkeypatch):
     called: list[str] = []
 

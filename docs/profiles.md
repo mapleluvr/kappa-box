@@ -1,6 +1,6 @@
 # profile 登记、探针与 pin
 
-> 状态：设计稿与初始实现（2026-09-11）。已完成 profile/facts v1 schema、只读盘点和一次本机 host 组可见性探针；完整 profile 仍未验证。本文定义「一条 profile 是什么、怎么变成可用」。
+> 状态：设计稿与初始实现（2026-09-12）。已完成 facts/profile v1 合同、只读探针、专用 WSL2 host probe、Landlock ABI probe，以及首个真实 OpenShell + Docker runtime adapter 与 lifecycle vertical slice；完整 profile 仍未验证。
 > 需求见 [design.md](design.md) §2，纵深与拒绝语义见 [semantic-architecture.md](semantic-architecture.md)。
 
 ## 1. 一条 profile 由什么组成
@@ -25,7 +25,7 @@
 
 | id | kappa-box 提供什么 | 引擎与 runtime | 强制发生在哪 | 状态 |
 | --- | --- | --- | --- | --- |
-| `wsl2:l1@openshell-docker` | 全权：专用发行版配置、Docker Engine、网关、网络与 cgroup | OpenShell + Docker | **WSL2 内核**（Landlock + seccomp + cgroup） | 第一条路径（已定，未验证） |
+| `wsl2:l1@openshell-docker` | 全权：专用发行版配置、Docker Desktop daemon、网关、网络与 cgroup | OpenShell + Docker | **WSL2 内核**（Landlock + seccomp + cgroup） | adapter vertical slice 已跑通；完整探针未通过，仍 `unverified` |
 | `wsl2:l1@oci-direct` | 同一发行版内直连引擎 | 标准 OCI 工具（薄封装） | WSL2 内核 | 对照与后备（未验证） |
 | `linux:l1@podman-rootless` | profile 登记、探针、pin、策略 | OpenShell + Podman rootless | 宿主内核 | 未验证 |
 | `linux:l2@<runtime>` | 同上，runtime 逐实例选择 | OCI + runsc / nsjail 等 | 宿主内核 + 更强的 syscall 边界 | 未验证（runtime 选择见 §3） |
@@ -35,6 +35,8 @@
 
 Windows 侧的事实：工作负载本来就是 Linux 容器，所以「Windows 基础设施」与「三档 level」是两条轴；
 同一个 level 在不同宿主上是**不同 profile**，因为强制发生在不同内核里。
+
+当前首个 adapter 固定到 Docker Desktop 4.87.0 / Docker Engine 29.7.2 暴露的 daemon，使用专用发行版内的 OpenShell 0.0.116 CLI/gateway 和官方 sandbox image digest。这个组合已经通过真实 create、supervisor relay、Landlock ruleset 安装、exec、stop、delete 路径；Windows callback 端口发布是 host-side prerequisite。证据记录在 `docs/decisions/0002-openshell-docker-route.md` 和 `evidence/releases/`，不改变 `acceptance`。
 
 同一宿主可以登记多个 tier，表中只列当前计划登记的条目。`wsl2` 上未列 `l2` / `l3` 是因为尚未验证：
 WSL2 内核里能否注册 runsc、以及 microVM 需要的嵌套虚拟化与 `/dev/kvm` 访问权限，都还没跑过探针
@@ -53,11 +55,12 @@ l2 的 runtime 选择本身是未决项：同一发行版内可选 runsc（轻�
 
 ## 4. 探针套件
 
-探针把「候选 profile」变成「已登记事实」。当前已经运行只读宿主盘点、日常发行版的 host 组隔离可见性探针，以及专用发行版 `kappa-box-ubuntu-24.04` 的 host 组探针。盘点脱敏摘要见
+探针把「候选 profile」变成「已登记事实」。当前已经运行只读宿主盘点、日常发行版的 host 组隔离可见性探针、专用发行版 `kappa-box-ubuntu-24.04` 的 host 组探针，以及真实 OpenShell + Docker runtime vertical slice。盘点脱敏摘要见
 `evidence/releases/initial-readonly-inventory-summary.json`；日常发行版历史摘要见
 `evidence/releases/host-visibility-2026-09-11-summary.json`；专用发行版 clean commit `cbc7891` 的摘要见
-`evidence/releases/host-visibility-2026-09-12-summary.json`。原始结果只留在执行工作区的
-`evidence/probe-runs/`，不会随仓库提交。盘点产生 `unverified` / `inventory_only`；host 组产生 `unverified` / `host_visibility`，本机日常发行版上 host 组为 fail。两者都不代表完整套件通过，也不把登记表写成 `verified` 或 `failed`。
+`evidence/releases/host-visibility-2026-09-12-summary.json`。runtime slice 的 release summary 使用
+`evidence/releases/runtime-vertical-slice-<date>-summary.json`，原始结果只留在执行工作区的
+`evidence/probe-runs/`，不会随仓库提交。盘点产生 `unverified` / `inventory_only`；host 组产生 `unverified` / `host_visibility`；runtime slice 产生 `unverified` / `runtime_vertical_slice`。这些记录都不代表完整套件通过，也不把登记表写成 `verified`。
 其余检查仍为待执行项；拒绝即该 profile 不可用，不降级。
 
 | 组 | 探针 | 通过 | 拒绝 |
@@ -74,7 +77,22 @@ l2 的 runtime 选择本身是未决项：同一发行版内可选 runsc（轻�
 
 这些检查证明的是指定配置下的受测行为，不是不存在内核或 VMM 漏洞。
 
-## 5. 验收状态与升级
+## 7. 当前 Windows/WSL2 runtime vertical slice
+
+`runtime-vertical-slice` CLI 只调用已登记的 OpenShell + Docker route，固定执行
+`preflight → create → ready → exec(id) → stop → delete`。它把原始 stdout/stderr 留在被忽略的
+`evidence/probe-runs/runtime-vertical-slice.json`，release summary 去掉命令流，并固定写入
+`acceptance: unverified`、`facts: null`、`factsDigest: null`、`pins: null`。
+
+```text
+PYTHONPATH=src python -m kappa_box runtime-vertical-slice \
+  --profile wsl2:l1@openshell-docker \
+  --gateway-insecure
+```
+
+`--gateway-insecure` 只对应当前已验证的本地 plaintext gateway 配置；生产化 mTLS、gateway
+所有权、端口发布和每次运行的 PKI 隔离仍是后续 host-side contract，不能由调用方通过运行参数修改。
+
 
 ```text
 unverified ──verify──> verifying ──通过──> verified
