@@ -199,7 +199,7 @@
             "siblings"
           ],
           "properties": {
-            "name": { "const": "Ubuntu-24.04" },
+            "name": { "const": "kappa-box-ubuntu-24.04" },
             "wslVersion": {
               "type": ["string", "null"],
               "minLength": 1,
@@ -378,7 +378,7 @@
           "additionalProperties": false,
           "required": ["path", "visibility"],
           "properties": {
-            "path": { "const": "\\\\wsl$\\Ubuntu-24.04" },
+            "path": { "const": "\\\\wsl$\\kappa-box-ubuntu-24.04" },
             "visibility": {
               "enum": ["visible", "missing", "unreadable"]
             }

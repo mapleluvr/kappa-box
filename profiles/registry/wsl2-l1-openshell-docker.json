@@ -30,7 +30,9 @@
     "snapshot": null
   },
   "expectedFacts": null,
-  "pins": {},
+  "pins": {
+    "distribution": "kappa-box-ubuntu-24.04"
+  },
   "probe": {
     "suiteVersion": null,
     "lastRunAt": null,

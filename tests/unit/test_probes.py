@@ -106,7 +106,7 @@ def test_bounded_text_decodes_utf16le_output_from_wsl():
 
 
 def test_inventory_uses_only_fixed_read_only_commands():
-    specs = inventory_command_specs("Ubuntu-24.04")
+    specs = inventory_command_specs("kappa-box-ubuntu-24.04")
     executor = FakeExecutor({spec.name: result(spec.name) for spec in specs})
 
     inventory = collect_readonly_inventory(
@@ -134,7 +134,7 @@ def test_inventory_uses_only_fixed_read_only_commands():
     assert inventory["commands"][-1]["argv"] == [
         "wsl.exe",
         "-d",
-        "Ubuntu-24.04",
+        "kappa-box-ubuntu-24.04",
         "--",
         "docker",
         "info",
@@ -143,7 +143,7 @@ def test_inventory_uses_only_fixed_read_only_commands():
 
 def test_inventory_rejects_executor_result_with_wrong_command_identity():
     class LyingExecutor:
-        distribution = "Ubuntu-24.04"
+        distribution = "kappa-box-ubuntu-24.04"
 
         def run(
             self, name: str, argv: tuple[str, ...], timeout_seconds: float
@@ -183,7 +183,7 @@ def test_subprocess_executor_bounds_os_error_output(monkeypatch):
 
 
 def test_inventory_retains_command_failures_without_claiming_profile_failure():
-    specs = inventory_command_specs("Ubuntu-24.04")
+    specs = inventory_command_specs("kappa-box-ubuntu-24.04")
     results = {
         spec.name: result(
             spec.name,
@@ -194,7 +194,7 @@ def test_inventory_retains_command_failures_without_claiming_profile_failure():
     }
     results["docker.info"] = CommandResult(
         name="docker.info",
-        argv=("wsl.exe", "-d", "Ubuntu-24.04", "--", "docker", "info"),
+        argv=("wsl.exe", "-d", "kappa-box-ubuntu-24.04", "--", "docker", "info"),
         returncode=1,
         stdout="",
         stderr="daemon unavailable",
@@ -219,7 +219,7 @@ def test_inventory_retains_command_failures_without_claiming_profile_failure():
 
 
 def test_inventory_rejects_non_registered_distribution():
-    specs = inventory_command_specs("Ubuntu-24.04")
+    specs = inventory_command_specs("kappa-box-ubuntu-24.04")
     executor = FakeExecutor({spec.name: result(spec.name) for spec in specs})
 
     with pytest.raises(ValueError, match="registered distribution"):
@@ -249,8 +249,10 @@ def test_subprocess_executor_rejects_commands_outside_fixed_registry():
 
 
 def test_closed_table_registers_host_visibility_commands_with_fixed_argv():
-    inventory_names = [spec.name for spec in inventory_command_specs("Ubuntu-24.04")]
-    host_specs = host_visibility_command_specs("Ubuntu-24.04")
+    inventory_names = [
+        spec.name for spec in inventory_command_specs("kappa-box-ubuntu-24.04")
+    ]
+    host_specs = host_visibility_command_specs("kappa-box-ubuntu-24.04")
     by_name = {spec.name: spec.argv for spec in host_specs}
 
     assert inventory_names == [
@@ -261,11 +263,11 @@ def test_closed_table_registers_host_visibility_commands_with_fixed_argv():
         "docker.version",
         "docker.info",
     ]
-    assert default_command_specs("Ubuntu-24.04") == host_specs
+    assert default_command_specs("kappa-box-ubuntu-24.04") == host_specs
     assert by_name["host.mountinfo"] == (
         "wsl.exe",
         "-d",
-        "Ubuntu-24.04",
+        "kappa-box-ubuntu-24.04",
         "--",
         "cat",
         "/proc/self/mountinfo",
@@ -273,7 +275,7 @@ def test_closed_table_registers_host_visibility_commands_with_fixed_argv():
     assert by_name["host.interop"] == (
         "wsl.exe",
         "-d",
-        "Ubuntu-24.04",
+        "kappa-box-ubuntu-24.04",
         "--",
         "cat",
         "/proc/sys/fs/binfmt_misc/WSLInterop",
@@ -288,7 +290,7 @@ def test_subprocess_executor_rejects_tampered_host_visibility_argv():
     executor = SubprocessExecutor()
     registered = next(
         spec
-        for spec in host_visibility_command_specs("Ubuntu-24.04")
+        for spec in host_visibility_command_specs("kappa-box-ubuntu-24.04")
         if spec.name == "host.mountinfo"
     )
 

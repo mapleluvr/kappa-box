@@ -42,7 +42,7 @@ FORBIDDEN_OBSERVATION_KEYS = {
 @dataclass
 class FakeExecutor:
     results: dict[str, CommandResult]
-    distribution: str = "Ubuntu-24.04"
+    distribution: str = "kappa-box-ubuntu-24.04"
 
     def run(
         self, name: str, argv: tuple[str, ...], timeout_seconds: float
@@ -109,7 +109,7 @@ def _command_result(
 def daily_distro_results(**overrides: CommandResult) -> dict[str, CommandResult]:
     results = {
         spec.name: _command_result(spec)
-        for spec in host_visibility_command_specs("Ubuntu-24.04")
+        for spec in host_visibility_command_specs("kappa-box-ubuntu-24.04")
     }
     results.update(overrides)
     return results
@@ -155,7 +155,7 @@ def test_daily_distro_parses_inventory_stdout_without_writing_facts():
     observations = record["observations"]
 
     assert observations["kernel"] == "6.18.33.2-microsoft-standard-WSL2"
-    assert observations["distro"]["name"] == "Ubuntu-24.04"
+    assert observations["distro"]["name"] == "kappa-box-ubuntu-24.04"
     assert observations["distro"]["wslVersion"] == "2.7.11.0"
     assert observations["distro"]["windowsVersion"] == "10.0.26200.9168"
     assert observations["distro"]["state"] == "Running"
@@ -204,7 +204,10 @@ def test_readable_wslinterop_file_fails_host_group():
 
 
 def test_missing_wslinterop_file_passes_interop_check():
-    specs = {spec.name: spec for spec in host_visibility_command_specs("Ubuntu-24.04")}
+    specs = {
+        spec.name: spec
+        for spec in host_visibility_command_specs("kappa-box-ubuntu-24.04")
+    }
     record, _checker = collect_daily(
         **{
             "host.interop": _command_result(
@@ -222,7 +225,10 @@ def test_missing_wslinterop_file_passes_interop_check():
 
 
 def test_missing_cgroup_controller_fails_host_group():
-    specs = {spec.name: spec for spec in host_visibility_command_specs("Ubuntu-24.04")}
+    specs = {
+        spec.name: spec
+        for spec in host_visibility_command_specs("kappa-box-ubuntu-24.04")
+    }
     record, _checker = collect_daily(
         **{
             "host.cgroup.controllers": _command_result(
@@ -240,7 +246,10 @@ def test_missing_cgroup_controller_fails_host_group():
 
 
 def test_unreadable_cgroup_controllers_fail_closed_without_unavailable():
-    specs = {spec.name: spec for spec in host_visibility_command_specs("Ubuntu-24.04")}
+    specs = {
+        spec.name: spec
+        for spec in host_visibility_command_specs("kappa-box-ubuntu-24.04")
+    }
     record, _checker = collect_daily(
         **{
             "host.cgroup.controllers": _command_result(
@@ -260,7 +269,10 @@ def test_unreadable_cgroup_controllers_fail_closed_without_unavailable():
 
 
 def test_lsm_without_landlock_fails_host_group():
-    specs = {spec.name: spec for spec in host_visibility_command_specs("Ubuntu-24.04")}
+    specs = {
+        spec.name: spec
+        for spec in host_visibility_command_specs("kappa-box-ubuntu-24.04")
+    }
     record, _checker = collect_daily(
         **{
             "host.lsm": _command_result(
@@ -298,7 +310,7 @@ def test_subprocess_executor_rejects_tampered_host_command_argv():
     with pytest.raises(ValueError, match="not registered"):
         executor.run(
             "host.mountinfo",
-            ("wsl.exe", "-d", "Ubuntu-24.04", "--", "cat", "/etc/passwd"),
+            ("wsl.exe", "-d", "kappa-box-ubuntu-24.04", "--", "cat", "/etc/passwd"),
             30.0,
         )
     with pytest.raises(ValueError, match="not registered"):
@@ -323,7 +335,10 @@ def test_host_observation_matches_schema_and_keeps_acceptance_unverified():
 
 
 def test_redacted_summary_strips_stdout_and_sensitive_inventory_values():
-    specs = {spec.name: spec for spec in host_visibility_command_specs("Ubuntu-24.04")}
+    specs = {
+        spec.name: spec
+        for spec in host_visibility_command_specs("kappa-box-ubuntu-24.04")
+    }
     leaky_info = (
         _fixture_text("docker.info", "stdout")
         .replace("Name: redacted-host", "Name: RELENTLESS")
@@ -354,7 +369,7 @@ def test_redacted_summary_strips_stdout_and_sensitive_inventory_values():
 
 
 def test_readonly_inventory_contract_is_unchanged_by_host_visibility_commands():
-    specs = inventory_command_specs("Ubuntu-24.04")
+    specs = inventory_command_specs("kappa-box-ubuntu-24.04")
     executor = FakeExecutor(
         {
             spec.name: CommandResult(
@@ -400,7 +415,10 @@ def test_parser_does_not_fill_facts_shaped_fields():
 
 
 def test_dedicated_distro_fixture_can_pass_host_group():
-    specs = {spec.name: spec for spec in host_visibility_command_specs("Ubuntu-24.04")}
+    specs = {
+        spec.name: spec
+        for spec in host_visibility_command_specs("kappa-box-ubuntu-24.04")
+    }
     checker = FakeShareChecker(state="missing", seen=[])
     record = collect_host_visibility(
         PROFILE_ID,
@@ -450,13 +468,13 @@ def test_dedicated_distro_fixture_can_pass_host_group():
 
 
 def test_closed_command_table_includes_host_visibility_argv():
-    specs = host_visibility_command_specs("Ubuntu-24.04")
+    specs = host_visibility_command_specs("kappa-box-ubuntu-24.04")
     by_name = {spec.name: spec.argv for spec in specs}
 
     assert by_name["host.mountinfo"] == (
         "wsl.exe",
         "-d",
-        "Ubuntu-24.04",
+        "kappa-box-ubuntu-24.04",
         "--",
         "cat",
         "/proc/self/mountinfo",
@@ -466,14 +484,17 @@ def test_closed_command_table_includes_host_visibility_argv():
     assert by_name["host.cgroup.subtree"][-1] == "/sys/fs/cgroup/cgroup.subtree_control"
     assert by_name["host.lsm"][-1] == "/sys/kernel/security/lsm"
     assert by_name["host.lsm.proc"][-1] == "/proc/sys/kernel/lsm"
-    assert default_command_specs("Ubuntu-24.04") == specs
+    assert default_command_specs("kappa-box-ubuntu-24.04") == specs
     for spec in specs:
         assert "sh" not in spec.argv
         assert "-c" not in spec.argv
 
 
 def isolated_pass_overrides() -> dict[str, CommandResult]:
-    specs = {spec.name: spec for spec in host_visibility_command_specs("Ubuntu-24.04")}
+    specs = {
+        spec.name: spec
+        for spec in host_visibility_command_specs("kappa-box-ubuntu-24.04")
+    }
     return {
         "wsl.conf": _command_result(
             specs["wsl.conf"],
@@ -591,7 +612,10 @@ def test_missing_wsl_share_passes_share_check_when_other_checks_pass():
 
 
 def test_empty_cgroup_subtree_fails_closed_with_specific_reason():
-    specs = {spec.name: spec for spec in host_visibility_command_specs("Ubuntu-24.04")}
+    specs = {
+        spec.name: spec
+        for spec in host_visibility_command_specs("kappa-box-ubuntu-24.04")
+    }
     record, _checker = collect_isolated(
         "missing",
         **{
@@ -613,7 +637,10 @@ def test_empty_cgroup_subtree_fails_closed_with_specific_reason():
 
 
 def test_cgroup_subtree_missing_required_controllers_fails_host_group():
-    specs = {spec.name: spec for spec in host_visibility_command_specs("Ubuntu-24.04")}
+    specs = {
+        spec.name: spec
+        for spec in host_visibility_command_specs("kappa-box-ubuntu-24.04")
+    }
     record, _checker = collect_isolated(
         "missing",
         **{
@@ -634,7 +661,10 @@ def test_cgroup_subtree_missing_required_controllers_fails_host_group():
 
 
 def test_truncated_mountinfo_fails_host_group():
-    specs = {spec.name: spec for spec in host_visibility_command_specs("Ubuntu-24.04")}
+    specs = {
+        spec.name: spec
+        for spec in host_visibility_command_specs("kappa-box-ubuntu-24.04")
+    }
     record, _checker = collect_isolated(
         "missing",
         **{

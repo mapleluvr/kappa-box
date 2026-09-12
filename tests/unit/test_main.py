@@ -44,6 +44,35 @@ def test_source_commit_returns_head_commit_when_clean(monkeypatch, tmp_path: Pat
     ]
 
 
+def test_run_landlock_capability_writes_evidence(monkeypatch, tmp_path: Path):
+    calls: list[str] = []
+    record = {
+        "profileId": "wsl2:l1@openshell-docker",
+        "probeStatus": "landlock_capability",
+        "acceptance": "unverified",
+        "sourceCommit": "clean-commit",
+        "failureGroups": [],
+        "capability": {"status": "supported", "abiVersion": 7, "error": None},
+    }
+
+    monkeypatch.setattr(main_mod, "_ROOT", tmp_path)
+    monkeypatch.setattr(main_mod, "_source_commit", lambda root: "clean-commit")
+    monkeypatch.setattr(main_mod, "SubprocessExecutor", lambda: "executor")
+    monkeypatch.setattr(
+        main_mod,
+        "collect_landlock_capability",
+        lambda *args, **kwargs: calls.append("collect") or record,
+    )
+    monkeypatch.setattr(
+        main_mod,
+        "write_landlock_capability_evidence",
+        lambda *args, **kwargs: calls.append("write") or record,
+    )
+
+    assert main_mod.run_landlock_capability("wsl2:l1@openshell-docker") == 0
+    assert calls == ["collect", "write"]
+
+
 def test_run_host_visibility_does_not_collect_on_dirty_worktree(monkeypatch):
     called: list[str] = []
 

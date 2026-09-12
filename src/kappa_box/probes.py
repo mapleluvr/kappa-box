@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 
 _FIRST_PROFILE = "wsl2:l1@openshell-docker"
-_FIRST_PROFILE_DISTRIBUTION = "Ubuntu-24.04"
+_FIRST_PROFILE_DISTRIBUTION = "kappa-box-ubuntu-24.04"
 _PROBE_SUITE_VERSION = "0.1.0-inventory"
 
 
@@ -42,7 +42,7 @@ class SubprocessExecutor:
 
     def __init__(
         self,
-        distribution: str = "Ubuntu-24.04",
+        distribution: str = "kappa-box-ubuntu-24.04",
         max_output_bytes: int = 64 * 1024,
     ) -> None:
         if max_output_bytes < 1:
@@ -51,7 +51,9 @@ class SubprocessExecutor:
             raise ValueError("distribution is not the registered distribution")
         self._distribution = distribution
         self._allowed_commands = {
-            spec.name: spec for spec in default_command_specs(distribution)
+            spec.name: spec
+            for spec in default_command_specs(distribution)
+            + landlock_command_specs(distribution)
         }
         self._max_output_bytes = max_output_bytes
 
@@ -251,8 +253,35 @@ def host_visibility_command_specs(distribution: str) -> tuple[CommandSpec, ...]:
 
 
 def default_command_specs(distribution: str) -> tuple[CommandSpec, ...]:
-    """Return the full closed command table for the first WSL2 profile."""
+    """Return the closed host visibility command table."""
     return host_visibility_command_specs(distribution)
+
+
+LANDLOCK_ABI_SCRIPT = (
+    "import ctypes; "
+    "libc=ctypes.CDLL(None,use_errno=True); "
+    "result=libc.syscall(444,0,0,1); "
+    "print(('abi:'+str(result)) if result >= 0 else ('errno:'+str(ctypes.get_errno())))"
+)
+
+
+def landlock_command_specs(distribution: str) -> tuple[CommandSpec, ...]:
+    """Return the closed command used to read the kernel Landlock ABI."""
+    _validate_distribution_name(distribution)
+    return (
+        CommandSpec(
+            "host.landlock.abi",
+            (
+                "wsl.exe",
+                "-d",
+                distribution,
+                "--",
+                "/usr/bin/python3",
+                "-c",
+                LANDLOCK_ABI_SCRIPT,
+            ),
+        ),
+    )
 
 
 def collect_readonly_inventory(

@@ -15,9 +15,9 @@ from kappa_box.probes import (
 )
 
 _FIRST_PROFILE = "wsl2:l1@openshell-docker"
-_FIRST_PROFILE_DISTRIBUTION = "Ubuntu-24.04"
+_FIRST_PROFILE_DISTRIBUTION = "kappa-box-ubuntu-24.04"
 _PROBE_SUITE_VERSION = "0.1.0-host-visibility"
-WSL_SHARE_PATH = r"\\wsl$\Ubuntu-24.04"
+WSL_SHARE_PATH = r"\\wsl$\kappa-box-ubuntu-24.04"
 _REQUIRED_CONTROLLERS = ("cpu", "memory", "pids")
 _DRIVE_MOUNT = re.compile(r"^/mnt/[a-zA-Z]$")
 _SENSITIVE_DOCKER_KEYS = ("Name", "ID", "HTTP Proxy", "HTTPS Proxy")

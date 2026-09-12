@@ -10,6 +10,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from kappa_box.host_probe import collect_host_visibility, write_host_visibility_evidence
+from kappa_box.landlock_probe import (
+    collect_landlock_capability,
+    write_landlock_capability_evidence,
+)
 from kappa_box.probes import SubprocessExecutor
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -24,10 +28,17 @@ def main(argv: list[str] | None = None) -> int:
         help="Run the read-only host isolation visibility probe",
     )
     host.add_argument("--profile", required=True)
+    landlock = subparsers.add_parser(
+        "landlock-capability",
+        help="Read the kernel Landlock ABI without making an acceptance claim",
+    )
+    landlock.add_argument("--profile", required=True)
     args = parser.parse_args(argv)
-    if args.command != "host-visibility":
-        parser.error(f"unsupported command: {args.command}")
-    return run_host_visibility(args.profile)
+    if args.command == "host-visibility":
+        return run_host_visibility(args.profile)
+    if args.command == "landlock-capability":
+        return run_landlock_capability(args.profile)
+    parser.error(f"unsupported command: {args.command}")
 
 
 def run_host_visibility(profile_id: str) -> int:
@@ -59,6 +70,43 @@ def run_host_visibility(profile_id: str) -> int:
                 "sourceCommit": summary["sourceCommit"],
                 "failureGroups": summary["failureGroups"],
                 "host": group,
+                "rawPath": str(raw_path),
+                "summaryPath": str(summary_path),
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
+def run_landlock_capability(profile_id: str) -> int:
+    if profile_id != _PROFILE:
+        raise SystemExit(f"unsupported Landlock profile: {profile_id}")
+    collected_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    source_commit = _source_commit(_ROOT)
+    record = collect_landlock_capability(
+        profile_id,
+        executor=SubprocessExecutor(),
+        collected_at=collected_at,
+        source_commit=source_commit,
+    )
+    date = collected_at[:10]
+    raw_path = _ROOT / "evidence" / "probe-runs" / "landlock-capability.json"
+    summary_path = (
+        _ROOT / "evidence" / "releases" / f"landlock-capability-{date}-summary.json"
+    )
+    summary = write_landlock_capability_evidence(
+        record, raw_path=raw_path, summary_path=summary_path
+    )
+    print(
+        json.dumps(
+            {
+                "profileId": summary["profileId"],
+                "probeStatus": summary["probeStatus"],
+                "acceptance": summary["acceptance"],
+                "sourceCommit": summary["sourceCommit"],
+                "failureGroups": summary["failureGroups"],
+                "capability": summary["capability"],
                 "rawPath": str(raw_path),
                 "summaryPath": str(summary_path),
             },

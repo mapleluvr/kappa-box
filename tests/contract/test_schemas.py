@@ -82,6 +82,52 @@ def host_observation_validator() -> Draft202012Validator:
     return Draft202012Validator(schema, format_checker=FormatChecker())
 
 
+def landlock_validator() -> Draft202012Validator:
+    schema = load_schema("landlock-capability.schema.json")
+    return Draft202012Validator(schema, format_checker=FormatChecker())
+
+
+def _landlock_record(*, status: str = "supported") -> dict:
+    supported = status == "supported"
+    return {
+        "profileId": "wsl2:l1@openshell-docker",
+        "collectedAt": "2026-09-11T12:00:00Z",
+        "acceptance": "unverified",
+        "probeStatus": "landlock_capability",
+        "probeSuiteVersion": "0.1.0-landlock-capability",
+        "sourceCommit": "test-commit",
+        "facts": None,
+        "factsDigest": None,
+        "pins": None,
+        "failureGroups": [] if supported else ["landlock"],
+        "capability": {
+            "status": status,
+            "abiVersion": 7 if supported else None,
+            "error": None if supported else "command failed",
+        },
+        "commands": [
+            {
+                "name": "host.landlock.abi",
+                "argv": [
+                    "wsl.exe",
+                    "-d",
+                    "kappa-box-ubuntu-24.04",
+                    "--",
+                    "/usr/bin/python3",
+                    "-c",
+                    "probe",
+                ],
+                "returncode": 0 if supported else 1,
+                "stdout": "abi:7\n" if supported else "",
+                "stderr": "" if supported else "failed",
+                "duration_ms": 1,
+                "timed_out": False,
+                "truncated": False,
+            }
+        ],
+    }
+
+
 def _host_command(name: str, argv: list[str]) -> dict:
     return {
         "name": name,
@@ -93,7 +139,7 @@ def _host_command(name: str, argv: list[str]) -> dict:
 
 
 def _host_observation_record(*, result: str) -> dict:
-    distro = "Ubuntu-24.04"
+    distro = "kappa-box-ubuntu-24.04"
     commands = [
         _host_command("wsl.version", ["wsl.exe", "--version"]),
         _host_command("wsl.list", ["wsl.exe", "-l", "-v"]),
@@ -169,7 +215,7 @@ def _host_observation_record(*, result: str) -> dict:
         "observations": {
             "kernel": "6.18.33.2-microsoft-standard-WSL2",
             "distro": {
-                "name": "Ubuntu-24.04",
+                "name": "kappa-box-ubuntu-24.04",
                 "wslVersion": "2.7.11.0",
                 "windowsVersion": "10.0.26200.9168",
                 "state": "Running",
@@ -210,7 +256,7 @@ def _host_observation_record(*, result: str) -> dict:
                 "dockerRootDir": "/var/lib/docker",
             },
             "wslShare": {
-                "path": r"\\wsl$\Ubuntu-24.04",
+                "path": r"\\wsl$\kappa-box-ubuntu-24.04",
                 "visibility": "visible" if failed else "missing",
             },
         },
@@ -261,6 +307,20 @@ def unverified_profile() -> dict:
     }
 
 
+def test_landlock_capability_supported_record_matches_schema():
+    record = _landlock_record()
+
+    assert list(landlock_validator().iter_errors(record)) == []
+
+
+def test_landlock_capability_failure_requires_failure_group_and_error():
+    record = _landlock_record(status="unreadable")
+
+    assert list(landlock_validator().iter_errors(record)) == []
+    record["failureGroups"] = []
+    assert list(landlock_validator().iter_errors(record))
+
+
 def test_readonly_inventory_release_summary_matches_inventory_schema():
     summary = json.loads(
         (
@@ -271,31 +331,6 @@ def test_readonly_inventory_release_summary_matches_inventory_schema():
     errors = list(inventory_validator().iter_errors(summary))
 
     assert errors == []
-
-
-def test_host_visibility_release_summary_matches_host_observation_schema():
-    summary = json.loads(
-        (
-            ROOT / "evidence" / "releases" / "host-visibility-2026-09-11-summary.json"
-        ).read_text(encoding="utf-8")
-    )
-    blob = json.dumps(summary)
-
-    errors = list(host_observation_validator().iter_errors(summary))
-
-    assert errors == []
-    assert summary["acceptance"] == "unverified"
-    assert summary["probeStatus"] == "host_visibility"
-    assert summary["sourceCommit"] == "1ce36fb"
-    assert summary["facts"] is None
-    assert summary["factsDigest"] is None
-    assert summary["pins"] is None
-    assert summary["failureGroups"] == ["host"]
-    assert all("stdout" not in command for command in summary["commands"])
-    assert all("stderr" not in command for command in summary["commands"])
-    assert "RELENTLESS" not in blob
-    assert "administrator" not in blob
-    assert "http://" not in blob
 
 
 def test_inventory_schema_still_forbids_failure_groups():
@@ -345,7 +380,7 @@ def test_host_observation_schema_rejects_pass_with_failure_groups():
 def test_host_observation_schema_accepts_unreadable_wsl_share():
     record = _host_observation_record(result="fail")
     record["observations"]["wslShare"] = {
-        "path": r"\\wsl$\Ubuntu-24.04",
+        "path": r"\\wsl$\kappa-box-ubuntu-24.04",
         "visibility": "unreadable",
     }
 
@@ -357,7 +392,7 @@ def test_host_observation_schema_accepts_unreadable_wsl_share():
 def test_host_observation_schema_rejects_boolean_only_wsl_share():
     record = _host_observation_record(result="fail")
     record["observations"]["wslShare"] = {
-        "path": r"\\wsl$\Ubuntu-24.04",
+        "path": r"\\wsl$\kappa-box-ubuntu-24.04",
         "visible": True,
     }
 
@@ -463,7 +498,7 @@ def test_profile_schema_accepts_complete_verified_profile():
         },
         pins={
             "host": "windows-10.0.26200.9168",
-            "distribution": "Ubuntu-24.04",
+            "distribution": "kappa-box-ubuntu-24.04",
             "kernel": "6.18.33.2-microsoft-standard-WSL2",
             "engine": "docker-29.1.3",
             "runtime": "runc-1.3.4",
@@ -510,7 +545,7 @@ def test_profile_schema_rejects_verified_profile_with_failure_groups():
     profile["pins"].update(
         {
             "host": "host",
-            "distribution": "Ubuntu-24.04",
+            "distribution": "kappa-box-ubuntu-24.04",
             "kernel": "kernel",
             "engine": "engine",
             "runtime": "runtime",

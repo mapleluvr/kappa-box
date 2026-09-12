@@ -94,7 +94,7 @@ def complete_verified_profile() -> dict:
         },
         pins={
             "host": "windows-10.0.26200.9168",
-            "distribution": "Ubuntu-24.04",
+            "distribution": "kappa-box-ubuntu-24.04",
             "kernel": "6.18.33.2-microsoft-standard-WSL2",
             "engine": "docker-29.1.3",
             "runtime": "runc-1.3.4",
