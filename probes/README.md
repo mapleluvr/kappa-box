@@ -39,7 +39,7 @@ Landlock 能力使用独立的 `landlock-capability` probe 和 release schema；
 PYTHONPATH=src python -m kappa_box host-visibility --profile wsl2:l1@openshell-docker
 ```
 
-本机日常 `Ubuntu-24.04` 上的历史 host 组结果是 **fail**；当前登记的专用发行版已建立，下一次 clean probe 将验证其配置。脱敏摘要见 `evidence/releases/host-visibility-2026-09-11-summary.json`。
+本机日常 `Ubuntu-24.04` 上的历史 host 组结果是 **fail**；当前登记的专用发行版已建立，clean probe 的结果见 `evidence/releases/host-visibility-2026-09-12-summary.json`。该次结果关闭 automount/interop、无 drvfs、无 WSLInterop，但因 LSM 不可读和 `\\wsl$` 仍可见而 fail。
 
 这些命令只能证明读到的宿主可见性，不能证明 Landlock ABI、网络、bind/junction 对抗、资源上限或快照已经被正确强制。Docker Desktop socket 不在本封闭表内。
 

@@ -1,0 +1,35 @@
+{
+  "profileId": "wsl2:l1@openshell-docker",
+  "collectedAt": "2026-09-12T05:14:46.269273Z",
+  "acceptance": "unverified",
+  "probeStatus": "landlock_capability",
+  "probeSuiteVersion": "0.1.0-landlock-capability",
+  "sourceCommit": "a24fcf1",
+  "facts": null,
+  "factsDigest": null,
+  "pins": null,
+  "failureGroups": [],
+  "capability": {
+    "status": "supported",
+    "abiVersion": 7,
+    "error": null
+  },
+  "commands": [
+    {
+      "name": "host.landlock.abi",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "kappa-box-ubuntu-24.04",
+        "--",
+        "/usr/bin/python3",
+        "-c",
+        "import ctypes; libc=ctypes.CDLL(None,use_errno=True); result=libc.syscall(444,0,0,1); print(('abi:'+str(result)) if result >= 0 else ('errno:'+str(ctypes.get_errno())))"
+      ],
+      "returncode": 0,
+      "duration_ms": 3031,
+      "timed_out": false,
+      "truncated": false
+    }
+  ]
+}

@@ -1,0 +1,256 @@
+{
+  "profileId": "wsl2:l1@openshell-docker",
+  "collectedAt": "2026-09-12T05:15:55.228052Z",
+  "acceptance": "unverified",
+  "probeStatus": "host_visibility",
+  "probeSuiteVersion": "0.1.0-host-visibility",
+  "sourceCommit": "a24fcf1",
+  "facts": null,
+  "factsDigest": null,
+  "pins": null,
+  "failureGroups": [
+    "host"
+  ],
+  "groups": [
+    {
+      "name": "host",
+      "result": "fail",
+      "reason": "LSM list is unreadable; \\\\wsl$\\kappa-box-ubuntu-24.04 is visible from Windows"
+    }
+  ],
+  "observations": {
+    "kernel": "6.18.33.2-microsoft-standard-WSL2",
+    "distro": {
+      "name": "kappa-box-ubuntu-24.04",
+      "wslVersion": "2.7.11.0",
+      "windowsVersion": "10.0.26200.9168",
+      "state": "Stopped",
+      "siblings": [
+        "Ubuntu-24.04",
+        "docker-desktop"
+      ]
+    },
+    "wslConf": {
+      "systemd": true,
+      "automountEnabled": false,
+      "interopEnabled": false,
+      "presentKeys": [
+        "boot.systemd",
+        "automount.enabled",
+        "interop.enabled",
+        "user.default"
+      ]
+    },
+    "mounts": {
+      "windowsDriveMounts": [],
+      "drvfsPresent": false
+    },
+    "interop": {
+      "wslInteropFile": "missing",
+      "enabled": false
+    },
+    "cgroup": {
+      "controllers": [
+        "cpuset",
+        "cpu",
+        "io",
+        "memory",
+        "hugetlb",
+        "pids",
+        "rdma"
+      ],
+      "subtreeControl": [
+        "cpuset",
+        "cpu",
+        "io",
+        "memory",
+        "hugetlb",
+        "pids",
+        "rdma"
+      ],
+      "controllersReadable": true,
+      "subtreeReadable": true,
+      "driver": null,
+      "version": null
+    },
+    "lsm": {
+      "names": [],
+      "landlockPresent": false,
+      "source": null
+    },
+    "engine": {
+      "engineVersion": null,
+      "defaultRuntime": null,
+      "cgroupDriver": null,
+      "cgroupVersion": null,
+      "dockerRootDir": null
+    },
+    "wslShare": {
+      "path": "\\\\wsl$\\kappa-box-ubuntu-24.04",
+      "visibility": "visible"
+    }
+  },
+  "commands": [
+    {
+      "name": "wsl.version",
+      "argv": [
+        "wsl.exe",
+        "--version"
+      ],
+      "returncode": 0,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "wsl.list",
+      "argv": [
+        "wsl.exe",
+        "-l",
+        "-v"
+      ],
+      "returncode": 0,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "wsl.kernel",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "kappa-box-ubuntu-24.04",
+        "--",
+        "uname",
+        "-r"
+      ],
+      "returncode": 0,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "wsl.conf",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "kappa-box-ubuntu-24.04",
+        "--",
+        "cat",
+        "/etc/wsl.conf"
+      ],
+      "returncode": 0,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "docker.version",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "kappa-box-ubuntu-24.04",
+        "--",
+        "docker",
+        "version"
+      ],
+      "returncode": 127,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "docker.info",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "kappa-box-ubuntu-24.04",
+        "--",
+        "docker",
+        "info"
+      ],
+      "returncode": 127,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "host.mountinfo",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "kappa-box-ubuntu-24.04",
+        "--",
+        "cat",
+        "/proc/self/mountinfo"
+      ],
+      "returncode": 0,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "host.interop",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "kappa-box-ubuntu-24.04",
+        "--",
+        "cat",
+        "/proc/sys/fs/binfmt_misc/WSLInterop"
+      ],
+      "returncode": 1,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "host.cgroup.controllers",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "kappa-box-ubuntu-24.04",
+        "--",
+        "cat",
+        "/sys/fs/cgroup/cgroup.controllers"
+      ],
+      "returncode": 0,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "host.cgroup.subtree",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "kappa-box-ubuntu-24.04",
+        "--",
+        "cat",
+        "/sys/fs/cgroup/cgroup.subtree_control"
+      ],
+      "returncode": 0,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "host.lsm",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "kappa-box-ubuntu-24.04",
+        "--",
+        "cat",
+        "/sys/kernel/security/lsm"
+      ],
+      "returncode": 1,
+      "timed_out": false,
+      "truncated": false
+    },
+    {
+      "name": "host.lsm.proc",
+      "argv": [
+        "wsl.exe",
+        "-d",
+        "kappa-box-ubuntu-24.04",
+        "--",
+        "cat",
+        "/proc/sys/kernel/lsm"
+      ],
+      "returncode": 1,
+      "timed_out": false,
+      "truncated": false
+    }
+  ]
+}

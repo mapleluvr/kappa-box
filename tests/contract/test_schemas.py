@@ -333,7 +333,51 @@ def test_readonly_inventory_release_summary_matches_inventory_schema():
     assert errors == []
 
 
-def test_inventory_schema_still_forbids_failure_groups():
+def test_landlock_release_summary_matches_landlock_schema():
+    summary = json.loads(
+        (
+            ROOT
+            / "evidence"
+            / "releases"
+            / "landlock-capability-2026-09-12-summary.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    errors = list(landlock_validator().iter_errors(summary))
+
+    assert errors == []
+    assert summary["sourceCommit"] == "a24fcf1"
+    assert summary["capability"] == {
+        "status": "supported",
+        "abiVersion": 7,
+        "error": None,
+    }
+    assert all("stdout" not in command for command in summary["commands"])
+    assert all("stderr" not in command for command in summary["commands"])
+
+
+def test_host_visibility_dedicated_release_summary_matches_host_schema():
+    summary = json.loads(
+        (
+            ROOT / "evidence" / "releases" / "host-visibility-2026-09-12-summary.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    errors = list(host_observation_validator().iter_errors(summary))
+
+    assert errors == []
+    assert summary["sourceCommit"] == "a24fcf1"
+    assert summary["observations"]["wslConf"]["automountEnabled"] is False
+    assert summary["observations"]["wslConf"]["interopEnabled"] is False
+    assert summary["observations"]["mounts"]["drvfsPresent"] is False
+    assert summary["observations"]["interop"]["enabled"] is False
+    assert summary["observations"]["wslShare"]["visibility"] == "visible"
+    assert summary["failureGroups"] == ["host"]
+    assert "LSM list is unreadable" in summary["groups"][0]["reason"]
+    assert "wsl$" in summary["groups"][0]["reason"]
+    assert all("stdout" not in command for command in summary["commands"])
+    assert all("stderr" not in command for command in summary["commands"])
+
     schema = load_schema("inventory.schema.json")
 
     assert schema["properties"]["failureGroups"]["maxItems"] == 0
