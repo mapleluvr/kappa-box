@@ -91,6 +91,28 @@ def test_runtime_config_rejects_unregistered_gateway_or_image():
         )
 
 
+def test_subprocess_runner_decodes_wsl_output_as_utf8(monkeypatch):
+    class Completed:
+        returncode = 0
+        stdout = "ok"
+        stderr = ""
+
+    call: dict[str, object] = {}
+
+    def fake_run(*args, **kwargs):
+        call.update(kwargs)
+        return Completed()
+
+    monkeypatch.setattr("kappa_box.runtime.subprocess.run", fake_run)
+
+    from kappa_box.runtime import SubprocessRuntimeRunner
+
+    SubprocessRuntimeRunner().run(("echo",), 5)
+
+    assert call["encoding"] == "utf-8"
+    assert call["errors"] == "replace"
+
+
 def test_create_rejects_unregistered_profile_and_image_before_host_call():
     runner = RecordingRunner([])
     adapter = OpenShellDockerAdapter(config(), runner)
