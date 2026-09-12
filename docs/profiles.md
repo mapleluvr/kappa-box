@@ -55,7 +55,7 @@ l2 的 runtime 选择本身是未决项：同一发行版内可选 runsc（轻�
 
 探针把「候选 profile」变成「已登记事实」。当前已经运行只读宿主盘点、日常发行版的 host 组隔离可见性探针，以及专用发行版 `kappa-box-ubuntu-24.04` 的 host 组探针。盘点脱敏摘要见
 `evidence/releases/initial-readonly-inventory-summary.json`；日常发行版历史摘要见
-`evidence/releases/host-visibility-2026-09-11-summary.json`；专用发行版 clean commit `a24fcf1` 的摘要见
+`evidence/releases/host-visibility-2026-09-11-summary.json`；专用发行版 clean commit `cbc7891` 的摘要见
 `evidence/releases/host-visibility-2026-09-12-summary.json`。原始结果只留在执行工作区的
 `evidence/probe-runs/`，不会随仓库提交。盘点产生 `unverified` / `inventory_only`；host 组产生 `unverified` / `host_visibility`，本机日常发行版上 host 组为 fail。两者都不代表完整套件通过，也不把登记表写成 `verified` 或 `failed`。
 其余检查仍为待执行项；拒绝即该 profile 不可用，不降级。

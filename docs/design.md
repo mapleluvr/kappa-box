@@ -40,7 +40,7 @@ kappa-box 为评估运行提供**沙箱实例与它们的实际隔离事实**：
 deny-by-default 协议级出站 + 凭据注入 + driver 级资源限额」的现成 runtime；本机也能看到该组合的
 运行痕迹（一个参照集成的网关进程与缓存的安装包，见 [evidence.md](evidence.md) §4）。
 **kappa-box 自己尚未跑过完整沙箱 runtime 路径。** 已执行的只读宿主盘点脱敏摘要见
-`evidence/releases/initial-readonly-inventory-summary.json`；2026-09-12 在 clean commit `a24fcf1` 上对专用发行版执行的 host 组可见性摘要见
+`evidence/releases/initial-readonly-inventory-summary.json`；2026-09-12 在 clean commit `cbc7891` 上对专用发行版执行的 host 组可见性摘要见
 `evidence/releases/host-visibility-2026-09-12-summary.json`；该组因 LSM 不可读和 `\\wsl$\\kappa-box-ubuntu-24.04` 可见而失败。原始结果只在执行工作区的
 `evidence/probe-runs/`，不会随仓库提交。日常发行版上 host 组失败，不构成 profile 可用性或隔离强制证明。
 

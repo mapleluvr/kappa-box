@@ -366,7 +366,7 @@ def test_host_visibility_dedicated_release_summary_matches_host_schema():
     errors = list(host_observation_validator().iter_errors(summary))
 
     assert errors == []
-    assert summary["sourceCommit"] == "a24fcf1"
+    assert summary["sourceCommit"] == "cbc7891"
     assert summary["observations"]["wslConf"]["automountEnabled"] is False
     assert summary["observations"]["wslConf"]["interopEnabled"] is False
     assert summary["observations"]["mounts"]["drvfsPresent"] is False
