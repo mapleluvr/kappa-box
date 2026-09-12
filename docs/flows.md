@@ -1,6 +1,6 @@
 # 流程与状态
 
-> 状态：接口草案（2026-09-11），未实现、未验证。本文只描述**外部 Agent 视角**的调用、事件与状态；
+> 状态：接口草案与首个 runtime vertical slice（2026-09-12）。本文描述外部 Agent 的调用、事件与状态；当前 `runtime-vertical-slice` 已真实执行 Windows/WSL2 OpenShell + Docker 的最小 create → ready → exec → stop → delete 链路，但宿主服务、完整 SDK、facts、session、稳定快照和攻击探针仍在实现中。
 > 宿主内部实现（引擎、网关、探针）按黑盒处理。规则的单一定义在 [interface.md](interface.md) §5，
 > 本文只把规则画出来并标注对应关系；未决项汇总在 [open-questions.md](open-questions.md)。
 

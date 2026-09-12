@@ -1,7 +1,6 @@
 # 对外形状：调用面、profile 与路由
 
-> 状态：接口草案（2026-09-11），未实现。本文固定 kappa-box 对外暴露什么、调用方不能做什么。
-> 流程与状态图见 [flows.md](flows.md)；分层与拒绝语义见 [semantic-architecture.md](semantic-architecture.md)。
+> 状态：接口草案与首个 runtime vertical slice（2026-09-12）。本文固定 kappa-box 对外暴露什么、调用方不能做什么；当前 CLI 已可运行已登记 Windows/WSL2 OpenShell + Docker route 的最小真实生命周期，但完整 SDK、facts、session 与攻击探针仍未实现。流程与状态图见 [flows.md](flows.md)；分层与拒绝语义见 [semantic-architecture.md](semantic-architecture.md)。
 
 ## 1. 调用面只有一处
 

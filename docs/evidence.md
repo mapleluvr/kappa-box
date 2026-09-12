@@ -1,8 +1,6 @@
 # 依据：上游事实、本机事实与证据边界
 
-> 状态：调研记录、初始只读盘点与一次 host 组可见性探针（2026-09-11）。本文是 [design.md](design.md) 与 [profiles.md](profiles.md) 的依据。
-> 完整沙箱路径、隔离强制和攻击性验证仍未执行。
-> 全部为第三方文档与只读探测的**转述**：本文没有安装、启动、攻击或压测任何组件。
+> 状态：调研、真实 OpenShell + Docker runtime vertical slice 与 evidence 边界（2026-09-12）。本文记录上游事实、本机事实与可复现证据；完整隔离攻击套件、facts 采集和 profile 验收仍未完成。
 > 引用版本与页面时须重跑核对——上游处于 alpha 且发布节奏为日更量级。
 
 ## 1. 上游 OpenShell：平台能力差异
@@ -106,7 +104,7 @@ OpenShell 的「Windows 支持」等于「在 WSL2 里跑 Linux 那一套」。
 - 2026-09-11 另跑了一次 host 组隔离可见性探针（`probeSuiteVersion` `0.1.0-host-visibility`，`sourceCommit` `1ce36fb`）。脱敏摘要见 `evidence/releases/host-visibility-2026-09-11-summary.json`；原始输出在 `evidence/probe-runs/host-visibility.json`。记录为 `unverified` / `host_visibility`，`facts` / `factsDigest` / `pins` 仍为 null。本机日常 `Ubuntu-24.04` 上 host 组 **fail**：`wsl.conf` 未关 automount/interop、`/mnt/c|d|e` 为 drvfs、`WSLInterop` 启用、`\\wsl$\Ubuntu-24.04` 对 Windows 为 `visible`、`/sys/kernel/security/lsm` 与 `/proc/sys/kernel/lsm` 均不可读。cgroup controllers / subtree 含 cpu、memory、pids，且 `docker-desktop` 作为 sibling 被观察到，但未探测 Desktop socket。后续判定把 share 分成 `visible` / `missing` / `unreadable`，subtree 空值或缺 cpu/memory/pids、以及 `host.mountinfo` 截断都 fail closed；采集入口拒绝 dirty worktree。仓库登记表保持 `unverified` / `never_run`。这不能当作 Landlock ABI、实例限额或隔离强制证明。
 - 2026-09-12 在登记发行版 `kappa-box-ubuntu-24.04` 上从 clean commit `cbc7891` 重跑 host 组：`systemd=true`、automount 和 interop 均关闭，未发现 drvfs，`WSLInterop` 缺失，cgroup controllers / subtree 含 cpu、memory、pids；LSM 两个入口不可读，`\\wsl$\\kappa-box-ubuntu-24.04` 仍为 `visible`，因此 host 组仍 `fail`。摘要见 `evidence/releases/host-visibility-2026-09-12-summary.json`。
 - 同一 clean commit 上的 Landlock ABI probe 返回 `status=supported`、`abiVersion=7`。这只证明内核 syscall 能力，不证明 sandbox ruleset、seccomp 或 OpenShell enforcement；摘要见 `evidence/releases/landlock-capability-2026-09-12-summary.json`。
-- 本文不含任何 benchmark 运行、隔离攻击或候选对照。
+- 2026-09-12 已在登记发行版中完成真实 OpenShell + Docker lifecycle vertical slice。Docker Desktop 4.87.0 / Engine 29.7.2 通过 WSL integration 被 OpenShell 0.0.116 gateway 使用；官方 sandbox image 完成 `preflight → create → ready → exec(id) → stop → delete`。supervisor relay、network namespace、Landlock ABI 7 ruleset 和非 root identity 均在真实日志中出现。release summary 为 `evidence/releases/runtime-vertical-slice-2026-09-12-summary.json`，原始 stdout/stderr 只留在被忽略的 `evidence/probe-runs/runtime-vertical-slice.json`。该证据证明路线和最小控制面可以开始实现，仍记录 `unverified`，不填 `facts` / `factsDigest` / `pins`，不替代 network、resource、filesystem、session、snapshot 或 host hard gate 探针。
 
 ## 7. 上游引用
 

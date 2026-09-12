@@ -1,0 +1,48 @@
+{
+  "profileId": "wsl2:l1@openshell-docker",
+  "probeStatus": "runtime_vertical_slice",
+  "probeSuiteVersion": "0.1.0-runtime-vertical-slice",
+  "acceptance": "unverified",
+  "sourceCommit": "f89e60d",
+  "facts": null,
+  "factsDigest": null,
+  "pins": null,
+  "failureGroups": [],
+  "collectedAt": "2026-09-12T10:34:42.277383Z",
+  "image": "ghcr.io/nvidia/openshell-community/sandboxes/base@sha256:aeef1c63f00e2913ea002ccb3aaf925f338b5c5d70e63576f0d95c16a138044e",
+  "stages": [
+    {
+      "name": "preflight",
+      "status": "pass"
+    },
+    {
+      "name": "create",
+      "status": "pass",
+      "sandboxName": "courageous-monitor",
+      "state": "provisioning"
+    },
+    {
+      "name": "ready",
+      "status": "pass",
+      "state": "ready"
+    },
+    {
+      "name": "exec",
+      "status": "pass",
+      "command": [
+        "id"
+      ],
+      "returncode": 0
+    },
+    {
+      "name": "stop",
+      "status": "pass",
+      "state": "stopped"
+    },
+    {
+      "name": "delete",
+      "status": "pass",
+      "state": "deleted"
+    }
+  ]
+}
