@@ -15,6 +15,15 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol
 
+from kappa_box.outcomes import (
+    OperationOutcome,
+    OperationOutcomeError,
+    l1_create_gate,
+    l1_execution_error,
+    outcome_from_record,
+    refused,
+)
+
 _REGISTERED_PROFILE = "wsl2:l1@openshell-docker"
 _REGISTERED_DISTRIBUTION = "kappa-box-ubuntu-24.04"
 _REGISTERED_GATEWAY_ENDPOINT = "http://127.0.0.1:17670"
@@ -30,8 +39,11 @@ _CREATED_SANDBOX = re.compile(r"Created sandbox:\s*([A-Za-z0-9][A-Za-z0-9-]*)")
 _MAX_OUTPUT_BYTES = 256 * 1024
 
 
-class IdempotencyConflictError(ValueError):
+class IdempotencyConflictError(OperationOutcomeError):
     """The same idempotency key was used for a different request."""
+
+    def __init__(self, message: str = "idempotency key request differs") -> None:
+        super().__init__(refused("idempotency_conflict"), detail=message)
 
 
 @dataclass(frozen=True)
@@ -244,8 +256,13 @@ class RuntimeService:
 
     def create(self, idempotency_key: str, request: SandboxRequest) -> Sandbox:
         _validate_idempotency_key(idempotency_key)
-        if self._adapter.profile_acceptance != "verified":
-            raise RuntimeError("profile_unverified")
+        gate = l1_create_gate(
+            profile_registered=True,
+            profile_acceptance=self._adapter.profile_acceptance,
+        )
+        if gate is not None:
+            raise OperationOutcomeError(gate)
+        self._adapter._validate_request(request)
         request_json = _request_json(request)
         with self._lock:
             row = self._claim_or_read(idempotency_key, request_json)
@@ -255,26 +272,72 @@ class RuntimeService:
                 if idempotency_key in self._handles:
                     return self._handles[idempotency_key]
                 if row["sandbox_name"] is None:
-                    recovered = self._adapter.reconcile(
-                        idempotency_key, image=request.image
+                    return self._replay_incomplete_create(
+                        idempotency_key, request, request_json, row
                     )
-                    if recovered is None:
-                        raise RuntimeError("idempotency operation is unresolved")
-                    self._save(idempotency_key, request_json, recovered)
-                    return recovered
                 return self._handle_from_row(idempotency_key, row)
-            try:
-                sandbox = self._adapter.create(request, idempotency_key=idempotency_key)
-            except Exception:
-                recovered = self._adapter.reconcile(
-                    idempotency_key, image=request.image
-                )
-                if recovered is not None:
-                    self._save(idempotency_key, request_json, recovered)
-                    return recovered
+            return self._invoke_create(idempotency_key, request, request_json)
+
+    def _replay_incomplete_create(
+        self,
+        key: str,
+        request: SandboxRequest,
+        request_json: str,
+        row: sqlite3.Row,
+    ) -> Sandbox:
+        recovered, confirmed_absent = self._adapter._lookup_by_idempotency(
+            key, image=request.image
+        )
+        if recovered is not None:
+            self._save(key, request_json, recovered)
+            return recovered
+        stored = _outcome_from_row(row)
+        # An empty list cannot rule out a detached create still being accepted.
+        if (
+            not confirmed_absent
+            or stored is None
+            or stored.kind != "failed"
+            or stored.code != "provisioning_failed"
+        ):
+            raise OperationOutcomeError(
+                stored
+                if stored is not None
+                else l1_execution_error(error_code="host_unreachable")
+            )
+        return self._invoke_create(key, request, request_json)
+
+    def _invoke_create(
+        self, key: str, request: SandboxRequest, request_json: str
+    ) -> Sandbox:
+        try:
+            sandbox = self._adapter.create(request, idempotency_key=key)
+        except OperationOutcomeError as error:
+            if error.outcome.kind == "refused":
+                self._release_incomplete_claim(key)
                 raise
-            self._save(idempotency_key, request_json, sandbox)
-            return sandbox
+            recovered, _confirmed = self._adapter._lookup_by_idempotency(
+                key, image=request.image
+            )
+            if recovered is not None:
+                self._save(key, request_json, recovered)
+                return recovered
+            self._save_outcome(key, request_json, error.outcome)
+            raise
+        except ValueError:
+            self._release_incomplete_claim(key)
+            raise
+        except Exception as error:
+            recovered, _confirmed = self._adapter._lookup_by_idempotency(
+                key, image=request.image
+            )
+            if recovered is not None:
+                self._save(key, request_json, recovered)
+                return recovered
+            outcome = l1_execution_error(error_code="host_unreachable")
+            self._save_outcome(key, request_json, outcome)
+            raise OperationOutcomeError(outcome) from error
+        self._save(key, request_json, sandbox)
+        return sandbox
 
     def wait_ready(
         self, idempotency_key: str, *, timeout_seconds: float = 120.0
@@ -356,10 +419,19 @@ class RuntimeService:
                     sandbox_name TEXT,
                     profile_id TEXT NOT NULL,
                     image TEXT NOT NULL,
-                    state TEXT NOT NULL
+                    state TEXT NOT NULL,
+                    outcome_json TEXT
                 )
                 """
             )
+            columns = {
+                row[1] for row in connection.execute("PRAGMA table_info(operations)")
+            }
+            if "outcome_json" not in columns:
+                connection.execute(
+                    "ALTER TABLE operations ADD COLUMN outcome_json TEXT"
+                )
+            connection.commit()
 
     def _claim_or_read(self, key: str, request_json: str) -> sqlite3.Row | None:
         with sqlite3.connect(self._state_path) as connection:
@@ -370,7 +442,17 @@ class RuntimeService:
             ).fetchone()
             if row is None:
                 connection.execute(
-                    "INSERT INTO operations VALUES (?, ?, NULL, ?, ?, ?)",
+                    """
+                    INSERT INTO operations (
+                        idempotency_key,
+                        request_json,
+                        sandbox_name,
+                        profile_id,
+                        image,
+                        state,
+                        outcome_json
+                    ) VALUES (?, ?, NULL, ?, ?, ?, NULL)
+                    """,
                     (key, request_json, self._adapter.profile_id, "", "creating"),
                 )
             connection.commit()
@@ -388,7 +470,12 @@ class RuntimeService:
             connection.execute(
                 """
                 UPDATE operations
-                SET request_json = ?, sandbox_name = ?, profile_id = ?, image = ?, state = ?
+                SET request_json = ?,
+                    sandbox_name = ?,
+                    profile_id = ?,
+                    image = ?,
+                    state = ?,
+                    outcome_json = NULL
                 WHERE idempotency_key = ?
                 """,
                 (
@@ -402,6 +489,33 @@ class RuntimeService:
             )
             connection.commit()
         self._handles[key] = sandbox
+
+    def _save_outcome(
+        self, key: str, request_json: str, outcome: OperationOutcome
+    ) -> None:
+        record = json.dumps(outcome.to_record(), sort_keys=True, separators=(",", ":"))
+        with sqlite3.connect(self._state_path) as connection:
+            connection.execute(
+                """
+                UPDATE operations
+                SET request_json = ?, outcome_json = ?
+                WHERE idempotency_key = ? AND sandbox_name IS NULL
+                """,
+                (request_json, record, key),
+            )
+            connection.commit()
+
+    def _release_incomplete_claim(self, key: str) -> None:
+        with sqlite3.connect(self._state_path) as connection:
+            connection.execute(
+                """
+                DELETE FROM operations
+                WHERE idempotency_key = ? AND sandbox_name IS NULL
+                """,
+                (key,),
+            )
+            connection.commit()
+        self._handles.pop(key, None)
 
     def _update_state(self, key: str, sandbox: Sandbox) -> None:
         row = self._read(key)
@@ -471,13 +585,18 @@ class OpenShellDockerAdapter:
             argv.extend(("--env", f"{key}={value}"))
         argv.extend(("--", *request.command))
         result = self._run(tuple(argv), timeout_seconds=timeout_seconds)
-        if result.returncode != 0:
-            raise RuntimeError(f"sandbox create failed: {result.stderr.strip()}")
-        if result.truncated:
-            raise RuntimeError("sandbox create output was truncated")
+        error_code = _create_error_code(result)
+        if error_code is not None:
+            raise OperationOutcomeError(
+                l1_execution_error(error_code=error_code),
+                detail=result.stderr.strip(),
+            )
         name = _parse_created_name(result.stdout)
         if name is None:
-            raise RuntimeError("sandbox create returned no sandbox identity")
+            raise OperationOutcomeError(
+                l1_execution_error(error_code="host_unreachable"),
+                detail="sandbox create returned no sandbox identity",
+            )
         sandbox = Sandbox(
             name=name,
             profile_id=request.profile_id,
@@ -488,6 +607,12 @@ class OpenShellDockerAdapter:
         return sandbox
 
     def reconcile(self, idempotency_key: str, *, image: str) -> Sandbox | None:
+        sandbox, _confirmed = self._lookup_by_idempotency(idempotency_key, image=image)
+        return sandbox
+
+    def _lookup_by_idempotency(
+        self, idempotency_key: str, *, image: str
+    ) -> tuple[Sandbox | None, bool]:
         _validate_idempotency_key(idempotency_key)
         result = self._run(
             (
@@ -501,13 +626,17 @@ class OpenShellDockerAdapter:
             timeout_seconds=30.0,
         )
         if result.returncode != 0 or result.truncated:
-            return None
-        for item in _parse_backend_items(result.stdout):
+            return None, False
+        parsed = _parse_backend_items(result.stdout)
+        if parsed is None:
+            return None, False
+        items, confirmed_absent = parsed
+        for item in items:
             candidate = _backend_sandbox(item, self._config, image=image)
             if candidate is not None:
                 self._bind(candidate)
-                return candidate
-        return None
+                return candidate, False
+        return None, confirmed_absent
 
     def adopt(self, name: str) -> Sandbox:
         if not _valid_name(name):
@@ -545,7 +674,7 @@ class OpenShellDockerAdapter:
             if result.truncated:
                 raise RuntimeError("sandbox inspect output was truncated")
             phase = _sandbox_phase(result.stdout)
-            if phase in {
+            if phase is not None and phase in {
                 SandboxState.READY,
                 SandboxState.FAILED,
                 SandboxState.STOPPED,
@@ -675,7 +804,7 @@ class OpenShellDockerAdapter:
             raise ValueError("image is not approved")
         if not self._config.probe_only:
             if self._config.profile_acceptance != "verified":
-                raise RuntimeError("profile_unverified")
+                raise OperationOutcomeError(refused("profile_unverified"))
             if not self._config.policy_verified:
                 raise RuntimeError("policy_unverified")
         invalid_keys = [
@@ -738,6 +867,29 @@ class OpenShellDockerAdapter:
     def _require_not_terminal(sandbox: Sandbox) -> None:
         if sandbox.state is SandboxState.DELETED:
             raise ValueError("sandbox is deleted")
+
+
+def _create_error_code(result: RuntimeCommandResult) -> str | None:
+    if result.returncode == 124 or result.truncated:
+        return "deadline_exceeded"
+    if result.returncode == 127:
+        return "host_unreachable"
+    if result.returncode != 0:
+        return "provisioning_failed"
+    return None
+
+
+def _outcome_from_row(row: sqlite3.Row) -> OperationOutcome | None:
+    try:
+        raw = row["outcome_json"]
+    except (IndexError, KeyError):
+        return None
+    if not raw:
+        return None
+    loaded = json.loads(raw)
+    if not isinstance(loaded, dict):
+        raise ValueError("stored operation outcome is invalid")
+    return outcome_from_record(loaded)
 
 
 def _validate_idempotency_key(key: str) -> None:
@@ -826,20 +978,20 @@ def _parse_backend_sandbox(stdout: str, config: RuntimeConfig) -> Sandbox:
     return sandbox
 
 
-def _parse_backend_items(stdout: str) -> list[Any]:
+def _parse_backend_items(stdout: str) -> tuple[list[Any], bool] | None:
     try:
         value = json.loads(stdout)
     except json.JSONDecodeError:
-        return []
+        return None
     if isinstance(value, list):
-        return value
+        return value, value == []
     if isinstance(value, dict):
         for key in ("sandboxes", "items", "data"):
             items = value.get(key)
             if isinstance(items, list):
-                return items
-        return [value]
-    return []
+                return items, items == []
+        return [value], False
+    return None
 
 
 def _backend_sandbox(
@@ -851,7 +1003,7 @@ def _backend_sandbox(
     image_value = _find_string(value, {"image", "imageReference", "image_reference"})
     labels = _find_mapping(value, {"labels", "metadata"})
     profile_label = _find_label(labels, "kappa-box.profile")
-    if not _valid_name(name or "") or image_value != image:
+    if name is None or not _valid_name(name) or image_value != image:
         return None
     if profile_label != config.profile_id:
         return None

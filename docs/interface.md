@@ -73,7 +73,7 @@ resolver                     profile → 宿主类别、服务端点、所需凭
 ## 5. 语义规则
 
 1. **create 幂等**：同 `idempotencyKey` 不产生第二个实例；重放返回同一实例身份；同键但请求体不同则
-   `refused(idempotency_conflict)`。
+   `refused(idempotency_conflict)`。尚无 sandbox 身份的未完成 claim 先 reconcile；命中则接管。未命中时，仅 selector 返回 `[]` 或明确的空 `sandboxes`/`items`/`data` 数组可记为「明确无匹配」。只有已记录 `failed(provisioning_failed)` 且明确无匹配时允许同键重发。`unknown` 或没有已存 outcome 的未完成 claim 即使遇到空集合也保持待核对，不再 create：首次 `--detach` 请求可能仍在受理中，空列表不能证明它不会稍后出现；后续 reconcile 命中则接管。非空 list/envelope 零匹配、字段缺失、image/profile 不一致或 reconcile 失败均保持原结果，也不得把 `failed` 改写为 `host_unreachable`。后端调用前的 request / profile / image / env 校验失败不得吞成 `unknown`，也不得留下挡死同键重试的空 claim。
 2. **就绪是事件**：`create` 返回 `provisioning`；只有 `ready` 事件（带 `factsDigest`）之后才可使用。
    （`factsDigest` 与证据记录里的 `runtimeFactsDigest` 是同一个值的两个位置，见 [semantic-architecture.md](semantic-architecture.md) §5。）
 3. **facts 先于使用**：`create` 之后与 `collect` 之前各读一次；两次不一致则该次运行的隔离声称作废。
@@ -99,28 +99,32 @@ resolver                     profile → 宿主类别、服务端点、所需凭
 
 ## 6. 错误码
 
-**约定**：码是裸名（如 `facts_mismatch`）。操作结果有两种包装，写在码外面：
+**约定**：码是裸名（如 `facts_mismatch`）。操作结果有三种包装，写在码外面：
 `refused(码)` 表示本次调用被拒、没有产生副作用；`failed(码)` 表示已经产生副作用后失败
-（例如实例已建但未就绪）。同一个码不得在两种包装下混用。
+（例如实例已建但未就绪）；`unknown(码)` 表示**不能确认本次调用的副作用范围**，必须先按幂等键 reconcile，不得当作 `refused` 再开一个实例。`unknown` 不是「调用前发现宿主不可达」：调用前即可确定没有发出请求的，用 `refused`。同一个码不得在多种包装下混用。机器可读合同见 [`schemas/operation-outcome.schema.json`](../schemas/operation-outcome.schema.json)。记录字段是 `sideEffects`（`none` / `present` / `unreconciled`）和 `reconcile`（仅 `unknown` 为 `true`）。
 
-| 码 | 含义 | 可重试 |
-| --- | --- | --- |
-| `profile_unknown` | profile 未登记 | 否（先 `profiles.verify`） |
-| `profile_unverified` | 已登记但未过探针（含 `stale`） | 否 |
-| `invalid_profile` | 请求的 profile 形态或参数不在预注册范围内 | 否 |
-| `facts_mismatch` | 现场 facts 与登记期望不一致 | 否（需重新登记） |
-| `grant_denied` | 请求的路径 / 资源不在授予范围 | 否 |
-| `network_profile_denied` | 请求的网络档无法在该 profile 上强制 | 否 |
-| `image_unavailable` | 镜像不可取或 digest 不匹配 | 是（修引用后） |
-| `resource_exhausted` | 宿主资源不足 | 是（退避后） |
-| `provisioning_failed` | 创建过程中失败（已产生部分副作用） | 否（先 `delete` 清理） |
-| `host_unreachable` | 宿主服务不可达 | 是（同幂等键重发） |
-| `invalid_state` | 当前状态不允许该操作 | 否 |
-| `unsupported` | 该 profile 或后端不支持该操作（如 `start` 恢复） | 否 |
-| `unauthorized` | 凭据或 `scope` 不足 | 否 |
-| `idempotency_conflict` | 同一 `idempotencyKey` 对应不同请求体 | 否 |
-| `snapshot_unstable` | 取不到稳定快照 | 是（先冻结写入者） |
-| `deadline_exceeded` | 操作超时 | 是（先按幂等键复核） |
+| 码 | 包装 | 含义 | 可重试 |
+| --- | --- | --- | --- |
+| `profile_unknown` | `refused` | profile 未登记 | 否（先 `profiles.verify`） |
+| `profile_unverified` | `refused` | 已登记但验收不是 `verified`（含 `unverified` / `verifying` / `failed` / `stale`） | 否 |
+| `invalid_profile` | `refused` | 请求的 profile 形态或参数不在预注册范围内 | 否 |
+| `facts_mismatch` | `refused` | 现场 facts 与登记期望不一致 | 否（需重新登记） |
+| `grant_denied` | `refused` | 请求的路径 / 资源不在授予范围 | 否 |
+| `network_profile_denied` | `refused` | 请求的网络档无法在该 profile 上强制 | 否 |
+| `image_unavailable` | `refused` | 镜像不可取或 digest 不匹配 | 是（修引用后） |
+| `resource_exhausted` | `refused` | 宿主资源不足 | 是（退避后） |
+| `provisioning_failed` | `failed` | 创建过程中失败（已产生部分副作用） | 否（有实例时先 `delete`；确认无 sandbox 后同键可重发） |
+| `host_unreachable` | `unknown` | 无法确认宿主是否受理本次调用，副作用范围未知 | 仅重试 reconcile；未核清前不重发 create |
+| `invalid_state` | `refused` | 当前状态不允许该操作 | 否 |
+| `unsupported` | `refused` | 该 profile 或后端不支持该操作（如 `start` 恢复） | 否 |
+| `unauthorized` | `refused` | 凭据或 `scope` 不足 | 否 |
+| `idempotency_conflict` | `refused` | 同一 `idempotencyKey` 对应不同请求体 | 否 |
+| `snapshot_unstable` | `failed` | 取不到稳定快照 | 是（先冻结写入者） |
+| `deadline_exceeded` | `unknown` | 操作超时或响应不完整，副作用范围未知 | 仅重试 reconcile；未核清前不重发 create |
+
+预执行的策略 / facts / profile 拒绝一律 `refused`；后端已调用且结果确定的失败一律 `failed`；只有调用结果不确定、副作用范围核不清时才是 `unknown`。
+
+**与跨组件 error envelope 的字段对应**（S0 协调稿未冻结，不是本 schema 的一部分）：envelope 用 `sideEffect`（单数）∈ `{none, present, unknown}`，以及 `operation` / `requestId` / `retry` / `reconcile`。Box 记录只含 `kind` / `code` / `sideEffects` / `reconcile`，`additionalProperties: false`，因此不能当完整 envelope fixture 直接吃。映射是 `sideEffects=none→sideEffect=none`、`present→present`、`unreconciled→unknown`；`reconcile` 仅在 `kind=unknown` 为 `true`。`operation` 与 `requestId` 留在未冻结 envelope，本 L1 合同不发明完整服务信封。
 
 ## 7. 六件事：内部执行契约
 

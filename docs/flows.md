@@ -21,7 +21,7 @@
 const kbox = new KappaBox({ credentialRef: "env:KAPPA_BOX_TOKEN" });   // 宿主由 profile 决定，不另给 route
 
 const profile = await kbox.profiles.inspect("wsl2:l1@openshell-docker");
-if (profile.acceptance !== "verified") throw new Error("profile_unverified");
+if (profile.acceptance !== "verified") throw new Error("refused(profile_unverified)");
 
 const sb = await kbox.sandboxes.create({
   idempotencyKey: "run-42/task-7/attempt-1",
@@ -92,7 +92,7 @@ sequenceDiagram
   A->>S: profiles.inspect("wsl2:l1@openshell-docker")
   S->>R: 解析 profile
   R-->>S: 验收状态 + 期望 facts + 上限
-  S-->>A: verified（否则 profile_unverified → 拒绝）
+  S-->>A: verified（否则 refused(profile_unverified)）
   A->>S: sandboxes.create(idempotencyKey, spec)
   S->>R: profile → 宿主端点 + 凭据引用
   S->>V: create（带幂等键）
@@ -248,16 +248,15 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-  CALL(["SDK 调用"]) --> TRY{"宿主可达？"}
-  TRY -- 否 --> RETRY["可重试：host_unreachable<br/>用同一 idempotencyKey 重发"]
-  TRY -- 是 --> AUTH{"凭据 / scope 允许？"}
+  CALL(["SDK 调用"]) --> AUTH{"凭据 / scope 允许？"}
   AUTH -- 否 --> DENY["refused(unauthorized)<br/>不重试，写审计事件"]
-  AUTH -- 是 --> DONE{"调用结果"}
+  AUTH -- 是 --> DONE{"能否确认本次调用的结果与副作用范围？"}
   DONE -- 成功 --> OK(["返回结果或事件"])
-  DONE -- 客户端超时 --> RECON["按 idempotencyKey 与 labels 复核<br/>inspect(id) / list({labels})"]
+  DONE -- 确定失败且已有副作用 --> FAIL["failed(provisioning_failed 等)<br/>先按实例状态清理"]
+  DONE -- 不能确认（超时、宿主不可达、响应丢失） --> RECON["unknown(deadline_exceeded 或 host_unreachable)<br/>必须先按幂等键 reconcile<br/>inspect(id) / list({labels})"]
   RECON --> EXISTS{"实例存在？"}
   EXISTS -- 是 --> ADOPT["接管已有实例<br/>不重复创建"]
-  EXISTS -- 否 --> RETRY
+  EXISTS -- 未命中或无法核对 --> PENDING["保持 unknown 和原 claim<br/>后续只做 reconcile，不二次 create"]
   DONE -- 客户端进程死亡 --> ORPH["实例成为孤儿<br/>服务侧仍持有生命周期"]
   ORPH --> TTL["TTL / idle 到期 → expired"]
   TTL --> SWEEP["sweep：删除超期实例<br/>输出报告"]
@@ -266,7 +265,7 @@ flowchart TD
 
 对应规则：§5 第 10、11 条。错误码与可重试性见 [interface.md](interface.md) §6。
 
-注：状态名 `failed` 与结果包装 `failed(码)` 是两回事——前者指实例状态，后者指本次调用已产生副作用后失败。
+注：状态名 `failed` 与结果包装 `failed(码)` 是两回事——前者指实例状态，后者指本次调用已产生副作用后失败。`unknown(码)` 表示不能确认本次调用的副作用范围，必须先 reconcile，不得当作 `refused` 重试出第二个实例；调用前即可确定未发出请求的拒绝仍是 `refused`，不是 `unknown(host_unreachable)`。同键若仍无 sandbox 身份（`sandbox_name=NULL` 的未完成 claim）：先按幂等键 reconcile；命中则接管。未命中时，仅 selector 返回 `[]` 或明确的空 `sandboxes`/`items`/`data` 数组可记为「明确无匹配」。只有已记录 `failed(provisioning_failed)` 且明确无匹配时允许同键重发。`unknown` 或没有已存 outcome 的未完成 claim 即使遇到空集合也保持待核对，不再 create：首次 `--detach` 请求可能仍在受理中，空列表不能证明它不会稍后出现；后续 reconcile 命中则接管。非空 list/envelope 零匹配、字段缺失、image/profile 不一致或 reconcile 失败均保持原结果，也不得把 `failed` 改写为 `host_unreachable`。后端调用前的 request / profile / image / env 校验失败不得改写成 `unknown`，也不得留下挡死同键重试的空 claim。
 
 ## 10. 六件事的落地映射
 
