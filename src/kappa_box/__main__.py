@@ -154,6 +154,7 @@ def run_runtime_vertical_slice(
             ),
         ),
         gateway_insecure=gateway_insecure,
+        probe_only=True,
     )
     adapter = OpenShellDockerAdapter(config, SubprocessRuntimeRunner())
     record = collect_runtime_vertical_slice(
@@ -185,7 +186,7 @@ def run_runtime_vertical_slice(
             indent=2,
         )
     )
-    return 0
+    return 1 if summary["failureGroups"] else 0
 
 
 def _source_commit(root: Path) -> str:

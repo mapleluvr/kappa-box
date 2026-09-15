@@ -12,7 +12,8 @@ _REGISTERED_IMAGE = (
 
 def test_plaintext_gateway_requires_explicit_insecure_opt_in():
     with pytest.raises(
-        ValueError, match="plaintext gateway requires explicit insecure opt-in"
+        ValueError,
+        match="plaintext gateway requires explicit probe-only insecure opt-in",
     ):
         RuntimeConfig(
             profile_id="wsl2:l1@openshell-docker",
