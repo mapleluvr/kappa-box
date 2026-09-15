@@ -50,15 +50,15 @@ profile 的**预注册枚举**；登记层说的是**期望 facts**；控制面�
 | 层 | 拒绝什么 | 返回 |
 | --- | --- | --- |
 | ② | 未预注册的 profile、任意命令、任意宿主路径 | `refused(invalid_profile)`（不进入 ③） |
-| ④ | profile 未登记或未过探针 | `profile_unknown` / `profile_unverified` |
-| ⑤ | 期望 facts 与现场不符；授权范围外 | `facts_mismatch` / `grant_denied` / `network_profile_denied` |
-| ⑥ | 策略与沙箱生命周期不兼容（例如需要强制出站而控制面无该路径） | `failed(provisioning_failed)`，实例不进入 ready |
-| ⑦ | 内核不支持所需 ABI 且 profile 要求 `hard_requirement` | `failed(provisioning_failed)`（不降级为 `best_effort`） |
-| ⑧ | runtime 不可用或未注册 | `unsupported`，不回落默认 runtime |
+| ④ | profile 未登记或验收不是 `verified` | `refused(profile_unknown)` / `refused(profile_unverified)` |
+| ⑤ | 期望 facts 与现场不符；授权范围外 | `refused(facts_mismatch)` / `refused(grant_denied)` / `refused(network_profile_denied)` |
+| ⑥ | 策略与沙箱生命周期不兼容（例如需要强制出站而控制面无该路径） | 创建前：`refused(network_profile_denied)`；gateway 已受理创建后：`failed(provisioning_failed)`，实例不进入 ready |
+| ⑦ | 内核不支持所需 ABI 且 profile 要求 `hard_requirement` | 创建前 facts 检查：`refused(facts_mismatch)`（不降级为 `best_effort`） |
+| ⑧ | runtime 不可用或未注册 | `refused(unsupported)`，不回落默认 runtime |
 | ⑨ | 不适用（被约束对象） | 其行为只作为观测，不作为声明 |
 
 失败一律 fail closed：不进入 ready 的实例不算存在，也不产出可引用的证据。
-码与 `refused(...)` / `failed(...)` 两种包装的约定见 [interface.md](interface.md) §6。
+码与 `refused(...)` / `failed(...)` / `unknown(...)` 三种包装的约定见 [interface.md](interface.md) §6。
 
 ## 5. facts 与 digest
 
@@ -110,7 +110,6 @@ Windows 路线的 adapter 现在固定使用 Docker Desktop daemon、专用 WSL2
 这条 slice 的结果仍是 route evidence，不是 facts：它证明了控制面和部分生命周期通道可以运行，不能替代
 network、resource、filesystem、session、snapshot、完整 facts 或 host hard gate 探针。`acceptance` 保持
 `unverified`，直到完整 evidence chain 通过。
-
 
 本文不重复列未决项。facts 字段集与规范化、`acceptance` 的失效条件、层 ⑥ 的版本如何映射到 facts、
 supervisor 的完整性取证，全部汇总在 [open-questions.md](open-questions.md)。

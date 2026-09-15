@@ -92,6 +92,11 @@ def runtime_vertical_slice_validator() -> Draft202012Validator:
     return Draft202012Validator(schema, format_checker=FormatChecker())
 
 
+def operation_outcome_validator() -> Draft202012Validator:
+    schema = load_schema("operation-outcome.schema.json")
+    return Draft202012Validator(schema, format_checker=FormatChecker())
+
+
 def _landlock_record(*, status: str = "supported") -> dict:
     supported = status == "supported"
     return {
@@ -681,3 +686,94 @@ def test_runtime_vertical_slice_schema_rejects_verified_acceptance():
     }
 
     assert list(runtime_vertical_slice_validator().iter_errors(record))
+
+
+def test_operation_outcome_schema_accepts_refused_profile_unverified():
+    record = {
+        "kind": "refused",
+        "code": "profile_unverified",
+        "sideEffects": "none",
+        "reconcile": False,
+    }
+
+    assert list(operation_outcome_validator().iter_errors(record)) == []
+
+
+def test_operation_outcome_schema_accepts_failed_after_execution():
+    record = {
+        "kind": "failed",
+        "code": "provisioning_failed",
+        "sideEffects": "present",
+        "reconcile": False,
+    }
+
+    assert list(operation_outcome_validator().iter_errors(record)) == []
+
+
+def test_operation_outcome_schema_accepts_unknown_unreconciled():
+    record = {
+        "kind": "unknown",
+        "code": "deadline_exceeded",
+        "sideEffects": "unreconciled",
+        "reconcile": True,
+    }
+
+    assert list(operation_outcome_validator().iter_errors(record)) == []
+
+
+def test_operation_outcome_schema_accepts_unknown_host_unreachable():
+    record = {
+        "kind": "unknown",
+        "code": "host_unreachable",
+        "sideEffects": "unreconciled",
+        "reconcile": True,
+    }
+
+    assert list(operation_outcome_validator().iter_errors(record)) == []
+
+
+def test_operation_outcome_schema_rejects_refused_with_side_effects():
+    record = {
+        "kind": "refused",
+        "code": "profile_unverified",
+        "sideEffects": "present",
+        "reconcile": False,
+    }
+
+    assert list(operation_outcome_validator().iter_errors(record))
+
+
+def test_operation_outcome_schema_rejects_failed_profile_unverified():
+    record = {
+        "kind": "failed",
+        "code": "profile_unverified",
+        "sideEffects": "present",
+        "reconcile": False,
+    }
+
+    assert list(operation_outcome_validator().iter_errors(record))
+
+
+def test_operation_outcome_schema_rejects_unknown_without_reconcile():
+    record = {
+        "kind": "unknown",
+        "code": "deadline_exceeded",
+        "sideEffects": "unreconciled",
+        "reconcile": False,
+    }
+
+    assert list(operation_outcome_validator().iter_errors(record))
+
+
+def test_operation_outcome_schema_rejects_cross_component_envelope_fields():
+    record = {
+        "kind": "refused",
+        "code": "profile_unverified",
+        "sideEffects": "none",
+        "reconcile": False,
+        "sideEffect": "none",
+        "operation": "sandboxes.create",
+        "requestId": "req-1",
+    }
+
+    assert list(operation_outcome_validator().iter_errors(record))

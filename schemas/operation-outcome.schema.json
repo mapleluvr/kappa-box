@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kappa-box.invalid/schemas/operation-outcome.schema.json",
+  "title": "kappa-box L1 operation outcome v1",
+  "description": "Machine-checkable L1 operation result: refused (no side effects), failed (side effects then failure), or unknown (side-effect scope cannot be determined and must be reconciled). unknown is not a pre-call host miss. This schema does not record facts, profile acceptance, or the unfrozen cross-component envelope fields operation/requestId. Box sideEffects maps to envelope sideEffect as none→none, present→present, unreconciled→unknown.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "code", "sideEffects", "reconcile"],
+      "properties": {
+        "kind": { "const": "refused" },
+        "code": {
+          "enum": [
+            "profile_unknown",
+            "profile_unverified",
+            "invalid_profile",
+            "facts_mismatch",
+            "grant_denied",
+            "network_profile_denied",
+            "image_unavailable",
+            "resource_exhausted",
+            "invalid_state",
+            "unsupported",
+            "unauthorized",
+            "idempotency_conflict"
+          ]
+        },
+        "sideEffects": { "const": "none" },
+        "reconcile": { "const": false }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "code", "sideEffects", "reconcile"],
+      "properties": {
+        "kind": { "const": "failed" },
+        "code": {
+          "enum": ["provisioning_failed", "snapshot_unstable"]
+        },
+        "sideEffects": { "const": "present" },
+        "reconcile": { "const": false }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "code", "sideEffects", "reconcile"],
+      "properties": {
+        "kind": { "const": "unknown" },
+        "code": {
+          "enum": ["host_unreachable", "deadline_exceeded"]
+        },
+        "sideEffects": { "const": "unreconciled" },
+        "reconcile": { "const": true }
+      }
+    }
+  ]
+}

@@ -89,6 +89,7 @@ def test_runtime_vertical_slice_evidence_redacts_command_streams(tmp_path: Path)
         "profileId": "wsl2:l1@openshell-docker",
         "probeSuiteVersion": "0.1.0-runtime-vertical-slice",
         "probeStatus": "runtime_vertical_slice",
+        "evidenceClass": "probe_only",
         "acceptance": "unverified",
         "sourceCommit": "abc1234",
         "collectedAt": "2026-09-12T09:00:00Z",
@@ -96,14 +97,14 @@ def test_runtime_vertical_slice_evidence_redacts_command_streams(tmp_path: Path)
         "facts": None,
         "factsDigest": None,
         "pins": None,
-        "failureGroups": [],
+        "failureGroups": ["channels"],
         "stages": [
             {
                 "name": "exec",
-                "status": "pass",
-                "returncode": 0,
-                "stdout": "secret output",
-                "stderr": "secret error",
+                "status": "fail",
+                "returncode": 1,
+                "stdout": "token=secret-output",
+                "stderr": "Authorization: Bearer secret-token",
             }
         ],
     }
@@ -114,9 +115,10 @@ def test_runtime_vertical_slice_evidence_redacts_command_streams(tmp_path: Path)
         summary_path=tmp_path / "summary.json",
     )
 
-    assert summary["stages"] == [{"name": "exec", "status": "pass", "returncode": 0}]
+    assert summary["stages"] == [{"name": "exec", "status": "fail", "returncode": 1}]
     assert "secret output" not in (tmp_path / "summary.json").read_text()
-    assert "secret error" in (tmp_path / "raw.json").read_text()
+    assert "secret-output" not in (tmp_path / "raw.json").read_text()
+    assert "secret-token" not in (tmp_path / "raw.json").read_text()
 
 
 def test_runtime_vertical_slice_marks_failure_and_attempts_cleanup():
