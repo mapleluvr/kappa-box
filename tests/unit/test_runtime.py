@@ -40,6 +40,23 @@ class RecordingRunner:
         return next(self.results)
 
 
+class StickyRunner:
+    def __init__(self, results: list[RuntimeCommandResult]) -> None:
+        self.results = list(results)
+        self.calls: list[tuple[tuple[str, ...], float]] = []
+        self._index = 0
+
+    def run(
+        self, argv: tuple[str, ...], timeout_seconds: float
+    ) -> RuntimeCommandResult:
+        self.calls.append((argv, timeout_seconds))
+        if self._index < len(self.results) - 1:
+            current = self.results[self._index]
+            self._index += 1
+            return current
+        return self.results[-1]
+
+
 def config(
     *,
     profile_acceptance: str = "unverified",
@@ -383,6 +400,15 @@ def test_adopt_requires_backend_identity_and_registered_image():
     assert adopted.state is SandboxState.READY
 
 
+def test_adopt_sandbox_get_timeout_raises_timeout_error():
+    runner = RecordingRunner([result(returncode=124, stderr="timed out")])
+    adapter = OpenShellDockerAdapter(config(), runner)
+
+    with pytest.raises(TimeoutError, match="sandbox inspect timed out"):
+        adapter.adopt("route-probe")
+    assert _verbs(runner) == [("sandbox", "get")]
+
+
 def test_delete_allows_provisioning_cleanup():
     runner = RecordingRunner([result('{"name":"route-probe"}'), result()])
     adapter = OpenShellDockerAdapter(config(), runner)
@@ -414,6 +440,38 @@ def test_wait_ready_rejects_expired_deadline_before_polling():
     with pytest.raises(ValueError, match="timeout_seconds must be finite and positive"):
         adapter.wait_ready(sandbox, timeout_seconds=0)
     assert runner.calls == []
+
+
+def test_wait_ready_sandbox_get_timeout_raises_timeout_error():
+    runner = RecordingRunner([result(returncode=124, stderr="timed out")])
+    adapter = OpenShellDockerAdapter(config(), runner)
+    sandbox = Sandbox(
+        name="route-probe",
+        profile_id=_REGISTERED_PROFILE,
+        image=_REGISTERED_IMAGE,
+        state=SandboxState.PROVISIONING,
+    )
+    adapter._bind(sandbox)
+
+    with pytest.raises(TimeoutError, match="sandbox inspect timed out"):
+        adapter.wait_ready(sandbox, timeout_seconds=5)
+    assert _verbs(runner) == [("sandbox", "get")]
+
+
+def test_wait_ready_sandbox_get_failure_raises_inspect_error():
+    runner = RecordingRunner([result(returncode=1, stderr="gateway down")])
+    adapter = OpenShellDockerAdapter(config(), runner)
+    sandbox = Sandbox(
+        name="route-probe",
+        profile_id=_REGISTERED_PROFILE,
+        image=_REGISTERED_IMAGE,
+        state=SandboxState.PROVISIONING,
+    )
+    adapter._bind(sandbox)
+
+    with pytest.raises(RuntimeError, match="sandbox inspect failed: gateway down"):
+        adapter.wait_ready(sandbox, timeout_seconds=5)
+    assert _verbs(runner) == [("sandbox", "get")]
 
 
 def test_exec_propagates_output_truncation():
@@ -607,7 +665,7 @@ def test_service_create_indeterminate_host_contact_is_unknown_host_unreachable(
     assert any(argv[7:9] == ("sandbox", "create") for argv, _ in runner.calls)
 
 
-def _verbs(runner: RecordingRunner) -> list[tuple[str, ...]]:
+def _verbs(runner: RecordingRunner | StickyRunner) -> list[tuple[str, ...]]:
     return [argv[7:9] for argv, _ in runner.calls]
 
 
@@ -1204,3 +1262,247 @@ def test_adapter_create_maps_backend_errors_through_l1_execution_error(
     assert seen == [error_code]
     assert caught.value.outcome == real(error_code=error_code)
     assert _verbs(runner) == [("sandbox", "create")]
+
+
+def test_service_peek_reads_sqlite_without_adopt_or_state_update(tmp_path: Path):
+    create_runner = RecordingRunner([result('{"name":"route-probe"}')])
+    state_path = tmp_path / "runtime.db"
+    first = _verified_service(tmp_path, create_runner)
+    created = first.create("attempt-1", _create_request())
+    assert created.state is SandboxState.PROVISIONING
+    assert _verbs(create_runner) == [("sandbox", "create")]
+
+    peek_runner = RecordingRunner([result(backend_json(phase="Failed"))])
+    second = RuntimeService(
+        OpenShellDockerAdapter(
+            config(profile_acceptance="verified", policy_verified=True), peek_runner
+        ),
+        state_path=state_path,
+    )
+
+    peeked = second.peek("attempt-1")
+
+    assert peeked is not None
+    assert peeked.name == "route-probe"
+    assert peeked.state is SandboxState.PROVISIONING
+    assert peek_runner.calls == []
+    saved = _claim_row(state_path, "attempt-1")
+    assert saved is not None
+    assert saved["state"] == SandboxState.PROVISIONING
+    assert saved["sandbox_name"] == "route-probe"
+
+
+def test_service_wait_ready_failed_phase_is_provisioning_failed(tmp_path: Path):
+    runner = RecordingRunner(
+        [result('{"name":"route-probe"}'), result(backend_json(phase="Failed"))]
+    )
+    service = _verified_service(tmp_path, runner)
+    service.create("attempt-1", _create_request())
+
+    with pytest.raises(OperationOutcomeError) as caught:
+        service.wait_ready("attempt-1")
+
+    assert caught.value.to_record() == {
+        "kind": "failed",
+        "code": "provisioning_failed",
+        "sideEffects": "present",
+        "reconcile": False,
+    }
+    saved = _claim_row(tmp_path / "runtime.db", "attempt-1")
+    assert saved is not None
+    assert saved["state"] == SandboxState.FAILED
+
+
+@pytest.mark.parametrize("phase", ["Stopped", "Deleted"])
+def test_service_wait_ready_stopped_or_deleted_is_invalid_state(
+    tmp_path: Path, phase: str
+):
+    runner = RecordingRunner(
+        [result('{"name":"route-probe"}'), result(backend_json(phase=phase))]
+    )
+    service = _verified_service(tmp_path / phase.lower(), runner)
+    service.create("attempt-1", _create_request())
+
+    with pytest.raises(OperationOutcomeError) as caught:
+        service.wait_ready("attempt-1")
+
+    assert caught.value.to_record() == {
+        "kind": "refused",
+        "code": "invalid_state",
+        "sideEffects": "none",
+        "reconcile": False,
+    }
+
+
+def test_service_wait_ready_timeout_on_known_sandbox_is_invalid_state(
+    tmp_path: Path,
+):
+    runner = StickyRunner(
+        [
+            result('{"name":"route-probe"}'),
+            result(backend_json(phase="Provisioning")),
+        ]
+    )
+    service = RuntimeService(
+        OpenShellDockerAdapter(
+            config(profile_acceptance="verified", policy_verified=True), runner
+        ),
+        state_path=tmp_path / "runtime.db",
+    )
+    service.create("attempt-1", _create_request())
+
+    with pytest.raises(OperationOutcomeError) as caught:
+        service.wait_ready("attempt-1", timeout_seconds=0.2)
+
+    assert caught.value.to_record() == {
+        "kind": "refused",
+        "code": "invalid_state",
+        "sideEffects": "none",
+        "reconcile": False,
+    }
+    assert caught.value.to_record()["kind"] != "unknown"
+    assert ("sandbox", "get") in _verbs(runner)
+
+
+def test_service_wait_ready_get_timeout_on_known_sandbox_is_invalid_state(
+    tmp_path: Path,
+):
+    runner = RecordingRunner(
+        [
+            result('{"name":"route-probe"}'),
+            result(returncode=124, stderr="timed out"),
+            result('{"name":"route-probe-2"}'),
+        ]
+    )
+    service = _verified_service(tmp_path, runner)
+    service.create("attempt-1", _create_request())
+
+    with pytest.raises(OperationOutcomeError) as caught:
+        service.wait_ready("attempt-1")
+
+    assert caught.value.to_record() == {
+        "kind": "refused",
+        "code": "invalid_state",
+        "sideEffects": "none",
+        "reconcile": False,
+    }
+    assert _verbs(runner) == [("sandbox", "create"), ("sandbox", "get")]
+    saved = _claim_row(tmp_path / "runtime.db", "attempt-1")
+    assert saved is not None
+    assert saved["state"] == SandboxState.PROVISIONING
+    assert saved["sandbox_name"] == "route-probe"
+
+
+def test_service_wait_ready_get_timeout_on_fresh_service_keeps_provisioning(
+    tmp_path: Path,
+):
+    state_path = tmp_path / "runtime.db"
+    first_runner = RecordingRunner([result('{"name":"route-probe"}')])
+    first = _verified_service(tmp_path, first_runner)
+    created = first.create("attempt-1", _create_request())
+    assert created.state is SandboxState.PROVISIONING
+    assert _verbs(first_runner) == [("sandbox", "create")]
+
+    second_runner = RecordingRunner(
+        [
+            result(returncode=124, stderr="timed out"),
+            result('{"name":"route-probe-2"}'),
+        ]
+    )
+    second = RuntimeService(
+        OpenShellDockerAdapter(
+            config(profile_acceptance="verified", policy_verified=True),
+            second_runner,
+        ),
+        state_path=state_path,
+    )
+
+    with pytest.raises(OperationOutcomeError) as caught:
+        second.wait_ready("attempt-1")
+
+    assert caught.value.to_record() == {
+        "kind": "refused",
+        "code": "invalid_state",
+        "sideEffects": "none",
+        "reconcile": False,
+    }
+    assert _verbs(second_runner) == [("sandbox", "get")]
+    saved = _claim_row(state_path, "attempt-1")
+    assert saved is not None
+    assert saved["state"] == SandboxState.PROVISIONING
+    assert saved["sandbox_name"] == "route-probe"
+
+
+def test_service_wait_ready_does_not_rewrite_ready_claim_before_inspect_timeout(
+    tmp_path: Path,
+):
+    state_path = tmp_path / "runtime.db"
+    first_runner = RecordingRunner(
+        [result('{"name":"route-probe"}'), result(backend_json())]
+    )
+    first = _verified_service(tmp_path, first_runner)
+    first.create("attempt-1", _create_request())
+    ready = first.wait_ready("attempt-1")
+    assert ready.state is SandboxState.READY
+
+    second_runner = RecordingRunner(
+        [
+            result(backend_json(phase="Provisioning")),
+            result(returncode=124, stderr="timed out"),
+            result('{"name":"route-probe-2"}'),
+        ]
+    )
+    second = RuntimeService(
+        OpenShellDockerAdapter(
+            config(profile_acceptance="verified", policy_verified=True),
+            second_runner,
+        ),
+        state_path=state_path,
+    )
+
+    with pytest.raises(OperationOutcomeError) as caught:
+        second.wait_ready("attempt-1")
+
+    assert caught.value.to_record() == {
+        "kind": "refused",
+        "code": "invalid_state",
+        "sideEffects": "none",
+        "reconcile": False,
+    }
+    assert _verbs(second_runner) == [("sandbox", "get"), ("sandbox", "get")]
+    saved = _claim_row(state_path, "attempt-1")
+    assert saved is not None
+    assert saved["state"] == SandboxState.READY
+    assert saved["sandbox_name"] == "route-probe"
+
+
+def test_service_wait_ready_get_failure_on_fresh_service_is_inspect_error(
+    tmp_path: Path,
+):
+    state_path = tmp_path / "runtime.db"
+    first_runner = RecordingRunner([result('{"name":"route-probe"}')])
+    first = _verified_service(tmp_path, first_runner)
+    first.create("attempt-1", _create_request())
+
+    second_runner = RecordingRunner(
+        [
+            result(returncode=1, stderr="gateway down"),
+            result('{"name":"route-probe-2"}'),
+        ]
+    )
+    second = RuntimeService(
+        OpenShellDockerAdapter(
+            config(profile_acceptance="verified", policy_verified=True),
+            second_runner,
+        ),
+        state_path=state_path,
+    )
+
+    with pytest.raises(RuntimeError, match="sandbox inspect failed: gateway down"):
+        second.wait_ready("attempt-1")
+
+    assert _verbs(second_runner) == [("sandbox", "get")]
+    saved = _claim_row(state_path, "attempt-1")
+    assert saved is not None
+    assert saved["state"] == SandboxState.PROVISIONING
+    assert saved["sandbox_name"] == "route-probe"
