@@ -1,8 +1,7 @@
-"""In-process S1 operation, event, and artifact facade over RuntimeService."""
+"""S1 operation, event, and artifact facade over RuntimeService."""
 
 from __future__ import annotations
 
-import copy
 import json
 import sqlite3
 import threading
@@ -113,7 +112,7 @@ class OperationResult:
 
 
 class OperationFacade:
-    """Process-local S1 operation surface with a runtime-owned event cursor."""
+    """S1 operation surface with a runtime-owned event cursor on state_path."""
 
     def __init__(
         self,
@@ -127,8 +126,6 @@ class OperationFacade:
             for profile_id, path in (profile_registry or _DEFAULT_REGISTRY).items()
         }
         self._lock = threading.RLock()
-        self._events: list[dict[str, Any]] = []
-        self._operation_seq = 0
 
     def inspect(
         self,
@@ -136,9 +133,7 @@ class OperationFacade:
         *,
         identity: Mapping[str, Any] | None = None,
     ) -> OperationResult:
-        return self.invoke(
-            "profiles.inspect", identity=identity, profile_id=profile_id
-        )
+        return self.invoke("profiles.inspect", identity=identity, profile_id=profile_id)
 
     def create(
         self,
@@ -240,13 +235,14 @@ class OperationFacade:
 
     def observe(self, cursor: str | None = None) -> list[dict[str, Any]]:
         start = _cursor_index(cursor)
-        with self._lock:
-            return [copy.deepcopy(event) for event in self._events[start:]]
+        return self._service.list_events(after=start)
 
     def _inspect(
         self, *, identity: Mapping[str, Any] | None, profile_id: str
     ) -> OperationResult:
-        if not isinstance(profile_id, str) or not (0 < len(profile_id) <= _ENVELOPE_MAX):
+        if not isinstance(profile_id, str) or not (
+            0 < len(profile_id) <= _ENVELOPE_MAX
+        ):
             return self._finish_error(
                 "profiles.inspect", identity, refused("invalid_profile")
             )
@@ -410,9 +406,7 @@ class OperationFacade:
         try:
             sandbox = self._peek(idempotency_key)
         except (RuntimeError, OSError, sqlite3.Error):
-            return self._finish_error(
-                "collect", identity, unknown("host_unreachable")
-            )
+            return self._finish_error("collect", identity, unknown("host_unreachable"))
         if sandbox is None or sandbox.state not in {
             SandboxState.READY,
             SandboxState.STOPPED,
@@ -519,9 +513,7 @@ class OperationFacade:
     def _peek(self, idempotency_key: str) -> Sandbox | None:
         return self._service.peek(idempotency_key)
 
-    def _local_identity(
-        self, idempotency_key: str
-    ) -> tuple[str | None, str | None]:
+    def _local_identity(self, idempotency_key: str) -> tuple[str | None, str | None]:
         try:
             sandbox = self._peek(idempotency_key)
         except (RuntimeError, OSError, sqlite3.Error):
@@ -597,14 +589,11 @@ class OperationFacade:
         if resolved_profile is None or len(resolved_profile) > _ENVELOPE_MAX:
             resolved_profile = _REGISTERED_PROFILE
         with self._lock:
-            if operation_id is None:
-                self._operation_seq += 1
-                operation_id = f"operation-{self._operation_seq}"
             result_identity = _result_identity(
                 supplied, profile_id=resolved_profile, sandbox_id=sandbox_id
             )
             event_payload = dict(payload)
-            self._append_event(
+            stored = self._append_event(
                 operation=operation,
                 operation_id=operation_id,
                 supplied=supplied,
@@ -612,6 +601,7 @@ class OperationFacade:
                 sandbox_id=sandbox_id,
                 payload=event_payload,
             )
+            operation_id = str(stored["identity"]["operationId"])
         return OperationResult(
             operation_id=operation_id,
             operation=operation,
@@ -627,19 +617,17 @@ class OperationFacade:
         self,
         *,
         operation: str,
-        operation_id: str,
+        operation_id: str | None,
         supplied: Mapping[str, Any],
         profile_id: str,
         sandbox_id: str | None,
         payload: dict[str, Any],
-    ) -> None:
-        revision = len(self._events) + 1
-        cursor = str(revision)
+    ) -> dict[str, Any]:
         event_identity: dict[str, Any] = {
             "profileId": profile_id,
-            "operationId": operation_id,
-            "revision": revision,
         }
+        if operation_id is not None:
+            event_identity["operationId"] = operation_id
         for key in _FORWARDED_IDENTITY:
             value = _string_field(supplied, key)
             if value is not None:
@@ -652,17 +640,13 @@ class OperationFacade:
             cause["requestId"] = request_id
         event = {
             "schemaVersion": _SCHEMA_VERSION,
-            "eventId": f"event-{revision}",
-            "cursor": cursor,
             "type": f"box.{operation}",
             "identity": event_identity,
-            "revision": revision,
             "cause": cause,
             "payload": payload,
             "provenance": {"owner": "kappa-box", "source": "runtime"},
         }
-        _validate_event(event)
-        self._events.append(event)
+        return self._service.append_event(event, validate=_validate_event)
 
 
 def _result_identity(
@@ -738,7 +722,11 @@ def _envelope_invalid(operation: object, identity: Mapping[str, Any] | None) -> 
 def _cursor_index(cursor: str | None) -> int:
     if cursor in (None, "", "0"):
         return 0
-    if not isinstance(cursor, str) or not cursor.isdigit() or cursor != str(int(cursor)):
+    if (
+        not isinstance(cursor, str)
+        or not cursor.isdigit()
+        or cursor != str(int(cursor))
+    ):
         raise ValueError("event cursor is invalid")
     return int(cursor)
 
