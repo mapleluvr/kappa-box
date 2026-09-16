@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://kappa-box.invalid/schemas/s1-event.schema.json",
   "title": "kappa-box S1 event envelope draft",
-  "description": "In-process runtime-owned S1 event envelope. cursor is a readable event-log position, not a revision alias, and is not a network transport.",
+  "description": "Runtime-owned S1 event envelope persisted with the runtime state_path. cursor is a readable event-log position, not a revision alias, and is not a network transport.",
   "type": "object",
   "additionalProperties": false,
   "required": [
