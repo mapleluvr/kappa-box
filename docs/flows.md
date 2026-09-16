@@ -1,6 +1,6 @@
 # 流程与状态
 
-> 状态：接口草案、首个 runtime vertical slice，以及进程内 S1 operation/event facade（2026-09-15）。本文描述外部 Agent 的调用、事件与状态；当前 `runtime-vertical-slice` 已真实执行 Windows/WSL2 OpenShell + Docker 的最小 create → ready → exec → stop → delete 链路。S1 facade 把 inspect / create / wait-ready / exec / collect / delete 收成带 `operationId` 的 outcome，并用进程内游标暴露事件；当前宿主在 `profile_unverified` 处拒绝 create，不进入 ready。宿主服务、完整 SDK、facts、session、稳定快照和攻击探针仍在实现中。
+> 状态：接口草案、首个 runtime vertical slice，以及 S1 operation/event facade（2026-09-16）。本文描述外部 Agent 的调用、事件与状态；当前 `runtime-vertical-slice` 已真实执行 Windows/WSL2 OpenShell + Docker 的最小 create → ready → exec → stop → delete 链路。S1 facade 把 inspect / create / wait-ready / exec / collect / delete 收成带 `operationId` 的 outcome，并用 runtime `state_path` 上的游标暴露事件；同一路径上的新 facade 可续读。当前宿主在 `profile_unverified` 处拒绝 create，不进入 ready。宿主服务、完整 SDK、facts、session、稳定快照和攻击探针仍在实现中。
 > 宿主内部实现（引擎、网关、探针）按黑盒处理。规则的单一定义在 [interface.md](interface.md) §5，
 > 本文只把规则画出来并标注对应关系；未决项汇总在 [open-questions.md](open-questions.md)。
 
@@ -52,7 +52,7 @@ const late = await kbox.collect(sb.id, [{ path: "/work/trace.log" }]);   // stop
 await kbox.sandboxes.delete(sb.id, { removeVolumes: false });           // 终结；命名卷保留（delete 后不再能通过操作面读取实例内容）
 ```
 
-当前宿主走拒绝链，不走上面的 ready 序列。`profiles.inspect` 返回登记表上的 `unverified`；随后已登记 profile 的 `sandboxes.create` 在 claim / backend 前给出 `refused(profile_unverified)`，未登记 profile 给出 `refused(profile_unknown)`，都不分配 `sandboxId`。`observe(cursor)` 仍能读到这次操作事件，并把 `runId` / `requestId` / `operationId` / `profileId` 关联在一起。已知实例的 `waitReady` / `exec` / `delete` 错误事件另带 `sandboxId`；S1 outcome identity 不含该字段。`waitReady` 只有状态为 `ready` 时成功，且不提供已验证 facts；对新进程里已有的 sqlite claim，inspect 超时保持原 claim，不先 adopt 改写，也不二次 create。`collect` 在稳定快照未实现前不返回 `artifactRef`；sqlite / `OSError` 查找失败是 `unknown(host_unreachable)`。
+当前宿主走拒绝链，不走上面的 ready 序列。`profiles.inspect` 返回登记表上的 `unverified`；随后已登记 profile 的 `sandboxes.create` 在 claim / backend 前给出 `refused(profile_unverified)`，未登记 profile 给出 `refused(profile_unknown)`，都不分配 `sandboxId`。`observe(cursor)` 仍能读到这次操作事件，并把 `runId` / `requestId` / `operationId` / `profileId` 关联在一起；游标和 `eventId` 由 runtime 生成，同一 `state_path` 上的新 facade 可续读。已知实例的 `waitReady` / `exec` / `delete` 错误事件另带 `sandboxId`；S1 outcome identity 不含该字段。`waitReady` 只有状态为 `ready` 时成功，且不提供已验证 facts；对新进程里已有的 sqlite claim，inspect 超时保持原 claim，不先 adopt 改写，也不二次 create。`collect` 在稳定快照未实现前不返回 `artifactRef`；sqlite / `OSError` 查找失败是 `unknown(host_unreachable)`。
 
 ## 3. 调用面与信任边界
 

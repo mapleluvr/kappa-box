@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from kappa_box.facade import OperationFacade
+from kappa_box.facade import OperationFacade, _validate_event
 from kappa_box.runtime import (
     OpenShellDockerAdapter,
     RuntimeCommandResult,
@@ -238,6 +238,154 @@ def test_observe_associates_shared_identity_and_reads_from_cursor(tmp_path: Path
     assert facade.observe(cursor="2") == []
 
 
+def test_observe_survives_new_facade_on_same_state_path(tmp_path: Path):
+    first_runner = RecordingRunner([])
+    first = _facade(tmp_path, first_runner)
+    state_path = tmp_path / "runtime.db"
+
+    first.inspect(_REGISTERED_PROFILE, identity=_S1_IDENTITY)
+    created = first.create("attempt-1", _create_request(), identity=_S1_IDENTITY)
+    first_events = first.observe()
+
+    created_record = created.to_outcome_record()
+    assert created_record is not None
+    assert created_record["kind"] == "refused"
+    assert created_record["code"] == "profile_unverified"
+    assert created_record["sideEffects"] == "none"
+    assert first_runner.calls == []
+    assert _claim_count(state_path) == 0
+    assert [event["cursor"] for event in first_events] == ["1", "2"]
+    assert [event["eventId"] for event in first_events] == ["event-1", "event-2"]
+
+    second_runner = RecordingRunner([result('{"name":"route-probe"}')])
+    second = _facade(tmp_path, second_runner)
+    replayed = second.observe()
+
+    assert replayed == first_events
+    assert [event["cursor"] for event in replayed] == ["1", "2"]
+    assert [event["eventId"] for event in replayed] == ["event-1", "event-2"]
+    assert len({event["eventId"] for event in replayed}) == len(replayed)
+    assert second.observe(cursor="1") == first_events[1:]
+    assert second.observe(cursor="2") == []
+    with pytest.raises(ValueError, match="event cursor is invalid"):
+        second.observe(cursor=_S1_IDENTITY["cursor"])
+    for event in replayed:
+        assert event["eventId"] != _S1_IDENTITY["eventId"]
+        assert event["cursor"] != _S1_IDENTITY["cursor"]
+        assert event["payload"].get("factsDigest") is None
+        assert event["payload"].get("artifactRef") is None
+        assert event["payload"].get("state") != "ready"
+        assert event["identity"].get("factsDigest") is None
+        assert event["identity"].get("artifactRef") is None
+        assert event["identity"].get("sandboxId") is None
+
+    refused_again = second.create("attempt-2", _create_request(), identity=_S1_IDENTITY)
+    refused_record = refused_again.to_outcome_record()
+    assert refused_record is not None
+    assert refused_record["kind"] == "refused"
+    assert refused_record["code"] == "profile_unverified"
+    assert refused_record["sideEffects"] == "none"
+    assert second_runner.calls == []
+    assert _claim_count(state_path) == 0
+    continued = second.observe(cursor="2")
+    assert [event["cursor"] for event in continued] == ["3"]
+    assert continued[0]["eventId"] == "event-3"
+    assert continued[0]["payload"]["code"] == "profile_unverified"
+    assert continued[0]["payload"].get("factsDigest") is None
+    assert continued[0]["payload"].get("artifactRef") is None
+    third = _facade(tmp_path, RecordingRunner([]))
+    assert [event["cursor"] for event in third.observe()] == ["1", "2", "3"]
+    assert [event["eventId"] for event in third.observe()] == [
+        "event-1",
+        "event-2",
+        "event-3",
+    ]
+
+
+def test_owner_operation_id_unique_across_new_facade_and_service(tmp_path: Path):
+    identity = {**_S1_IDENTITY, "operationId": None}
+    first_runner = RecordingRunner([])
+    first = _facade(tmp_path, first_runner)
+    state_path = tmp_path / "runtime.db"
+
+    first_inspect = first.inspect(_REGISTERED_PROFILE, identity=identity)
+    first_create = first.create("attempt-1", _create_request(), identity=identity)
+    first_events = first.observe()
+    first_ids = [first_inspect.operation_id, first_create.operation_id]
+
+    first_record = first_create.to_outcome_record()
+    assert first_ids[0] != first_ids[1]
+    assert [event["identity"]["operationId"] for event in first_events] == first_ids
+    assert first_record is not None
+    assert first_record["code"] == "profile_unverified"
+    assert first_runner.calls == []
+    assert _claim_count(state_path) == 0
+
+    second_runner = RecordingRunner([])
+    second_service = RuntimeService(
+        OpenShellDockerAdapter(config(), second_runner),
+        state_path=state_path,
+    )
+    second = OperationFacade(second_service)
+    second_inspect = second.inspect(_REGISTERED_PROFILE, identity=identity)
+    continued = second.observe(cursor=first_events[-1]["cursor"])
+    all_events = second.observe()
+    all_ids = [event["identity"]["operationId"] for event in all_events]
+
+    assert second_inspect.operation_id not in first_ids
+    assert continued[0]["identity"]["operationId"] == second_inspect.operation_id
+    assert all_ids == [*first_ids, second_inspect.operation_id]
+    assert len(set(all_ids)) == 3
+    for event in all_events:
+        assert event["identity"]["operationId"] == f"operation-{event['cursor']}"
+        assert event["eventId"] == f"event-{event['cursor']}"
+    assert second_runner.calls == []
+    assert _claim_count(state_path) == 0
+
+    third_service = RuntimeService(
+        OpenShellDockerAdapter(config(), RecordingRunner([])),
+        state_path=state_path,
+    )
+    third = OperationFacade(third_service)
+    third_inspect = third.inspect(_REGISTERED_PROFILE, identity=identity)
+    replayed_ids = [event["identity"]["operationId"] for event in third.observe()]
+    assert third_inspect.operation_id not in all_ids
+    assert len(set(replayed_ids)) == 4
+    assert replayed_ids[-1] == third_inspect.operation_id
+    assert third.observe(cursor="3")[0]["cursor"] == "4"
+
+
+def test_append_event_validation_failure_does_not_change_list_events(tmp_path: Path):
+    service = _service(tmp_path, RecordingRunner([]))
+    event = {
+        "schemaVersion": "s1-draft-1",
+        "type": "box.profiles.inspect",
+        "identity": {
+            "profileId": _REGISTERED_PROFILE,
+            "operationId": "operation-supplied",
+        },
+        "cause": {"kind": "external_intent"},
+        "payload": {"acceptance": "unverified"},
+        "provenance": {"owner": "kappa-box", "source": "runtime"},
+    }
+
+    stored = service.append_event(event, validate=_validate_event)
+    before = service.list_events()
+    assert before == [stored]
+    assert stored["eventId"] == "event-1"
+    assert stored["cursor"] == "1"
+
+    with pytest.raises(ValueError, match="s1 event schema validation failed"):
+        service.append_event({**event, "unexpected": True}, validate=_validate_event)
+
+    assert service.list_events() == before
+    restarted = RuntimeService(
+        OpenShellDockerAdapter(config(), RecordingRunner([])),
+        state_path=tmp_path / "runtime.db",
+    )
+    assert restarted.list_events() == before
+
+
 def test_wait_ready_exec_collect_delete_after_refusal_do_not_call_backend(
     tmp_path: Path,
 ):
@@ -316,9 +464,7 @@ def test_create_preserves_failed_and_unknown_and_keeps_them_distinct(tmp_path: P
         policy_verified=True,
     )
 
-    failed = failed_facade.create(
-        "attempt-1", _create_request(), identity=_S1_IDENTITY
-    )
+    failed = failed_facade.create("attempt-1", _create_request(), identity=_S1_IDENTITY)
     unknown = unknown_facade.create(
         "attempt-1", _create_request(), identity=_S1_IDENTITY
     )
@@ -525,9 +671,7 @@ def test_wait_ready_timeout_on_known_sandbox_is_not_unknown_reconcile(
     )
     facade.create("attempt-1", _create_request(), identity=_S1_IDENTITY)
 
-    waited = facade.wait_ready(
-        "attempt-1", identity=_S1_IDENTITY, timeout_seconds=0.2
-    )
+    waited = facade.wait_ready("attempt-1", identity=_S1_IDENTITY, timeout_seconds=0.2)
 
     record = waited.to_outcome_record()
     assert record is not None
@@ -570,7 +714,9 @@ def test_wait_ready_get_timeout_on_known_sandbox_is_refused_invalid_state(
     assert record["reconcile"] is False
     assert waited.payload.get("factsDigest") is None
     assert _verbs(runner) == [("sandbox", "create"), ("sandbox", "get")]
-    assert _claim_state(tmp_path / "runtime.db", "attempt-1") == SandboxState.PROVISIONING
+    assert (
+        _claim_state(tmp_path / "runtime.db", "attempt-1") == SandboxState.PROVISIONING
+    )
 
 
 def test_wait_ready_get_failure_on_known_sandbox_is_unknown_host_unreachable(
@@ -603,7 +749,9 @@ def test_wait_ready_get_failure_on_known_sandbox_is_unknown_host_unreachable(
     assert record["reconcile"] is True
     assert waited.payload.get("factsDigest") is None
     assert _verbs(runner) == [("sandbox", "create"), ("sandbox", "get")]
-    assert _claim_state(tmp_path / "runtime.db", "attempt-1") == SandboxState.PROVISIONING
+    assert (
+        _claim_state(tmp_path / "runtime.db", "attempt-1") == SandboxState.PROVISIONING
+    )
 
 
 def test_service_peek_reads_sqlite_without_adopt_or_state_update(tmp_path: Path):
@@ -824,9 +972,7 @@ def test_unknown_profile_create_is_profile_unknown_before_claim_on_unverified_ho
 
 
 def test_exec_request_value_errors_are_typed_outcomes(tmp_path: Path):
-    runner = RecordingRunner(
-        [result('{"name":"route-probe"}'), result(backend_json())]
-    )
+    runner = RecordingRunner([result('{"name":"route-probe"}'), result(backend_json())])
     facade = _facade(
         tmp_path,
         runner,
@@ -838,12 +984,8 @@ def test_exec_request_value_errors_are_typed_outcomes(tmp_path: Path):
     calls_after_ready = list(runner.calls)
 
     empty = facade.exec("attempt-1", (), identity=_S1_IDENTITY)
-    denied = facade.exec(
-        "attempt-1", ("id",), cwd="/etc", identity=_S1_IDENTITY
-    )
-    timed = facade.wait_ready(
-        "attempt-1", identity=_S1_IDENTITY, timeout_seconds=0
-    )
+    denied = facade.exec("attempt-1", ("id",), cwd="/etc", identity=_S1_IDENTITY)
+    timed = facade.wait_ready("attempt-1", identity=_S1_IDENTITY, timeout_seconds=0)
 
     empty_record = empty.to_outcome_record()
     denied_record = denied.to_outcome_record()

@@ -10,6 +10,7 @@ import sqlite3
 import subprocess
 import threading
 import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -246,7 +247,7 @@ class ExecResult:
 
 
 class RuntimeService:
-    """Own persistent sandbox lifecycle and idempotency for one runtime process."""
+    """Own persistent sandbox lifecycle, idempotency, and event cursor."""
 
     def __init__(self, adapter: OpenShellDockerAdapter, *, state_path: Path) -> None:
         self._adapter = adapter
@@ -393,6 +394,43 @@ class RuntimeService:
             self._update_state(idempotency_key, deleted)
             return deleted
 
+    def append_event(
+        self,
+        event: dict[str, Any],
+        *,
+        validate: Callable[[Mapping[str, Any]], None],
+    ) -> dict[str, Any]:
+        with self._lock, sqlite3.connect(self._state_path) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT COALESCE(MAX(cursor), 0) FROM events"
+            ).fetchone()
+            revision = int((row or (0,))[0]) + 1
+            stored = _event_with_owner_cursor(event, revision)
+            validate(stored)
+            payload = json.dumps(stored, sort_keys=True, separators=(",", ":"))
+            connection.execute(
+                """
+                INSERT INTO events (cursor, event_id, event_json)
+                VALUES (?, ?, ?)
+                """,
+                (revision, stored["eventId"], payload),
+            )
+            connection.commit()
+        return json.loads(payload)
+
+    def list_events(self, *, after: int = 0) -> list[dict[str, Any]]:
+        with self._lock, sqlite3.connect(self._state_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT event_json FROM events
+                WHERE cursor > ?
+                ORDER BY cursor ASC
+                """,
+                (after,),
+            ).fetchall()
+        return [json.loads(row[0]) for row in rows]
+
     def peek(self, idempotency_key: str) -> Sandbox | None:
         with self._lock:
             handle = self._handles.get(idempotency_key)
@@ -461,6 +499,15 @@ class RuntimeService:
                 connection.execute(
                     "ALTER TABLE operations ADD COLUMN outcome_json TEXT"
                 )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS events (
+                    cursor INTEGER PRIMARY KEY,
+                    event_id TEXT NOT NULL UNIQUE,
+                    event_json TEXT NOT NULL
+                )
+                """
+            )
             connection.commit()
 
     def _claim_or_read(self, key: str, request_json: str) -> sqlite3.Row | None:
@@ -911,6 +958,19 @@ def _create_error_code(result: RuntimeCommandResult) -> str | None:
     if result.returncode != 0:
         return "provisioning_failed"
     return None
+
+
+def _event_with_owner_cursor(event: dict[str, Any], revision: int) -> dict[str, Any]:
+    stored = json.loads(json.dumps(event))
+    stored["eventId"] = f"event-{revision}"
+    stored["cursor"] = str(revision)
+    stored["revision"] = revision
+    identity = stored.get("identity")
+    if isinstance(identity, dict):
+        identity["revision"] = revision
+        if "operationId" not in identity or identity["operationId"] in (None, ""):
+            identity["operationId"] = f"operation-{revision}"
+    return stored
 
 
 def _outcome_from_row(row: sqlite3.Row) -> OperationOutcome | None:
