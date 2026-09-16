@@ -21,7 +21,9 @@ from kappa_box.outcomes import (
     unknown,
 )
 from kappa_box.profile import load_profile
+from kappa_box.profile_gate import ProfileGate, evaluate_host_record
 from kappa_box.runtime import (
+    CollectResult,
     RuntimeService,
     Sandbox,
     SandboxRequest,
@@ -119,13 +121,26 @@ class OperationFacade:
         service: RuntimeService,
         *,
         profile_registry: Mapping[str, Path] | None = None,
+        profile_gate: ProfileGate | None = None,
     ) -> None:
         self._service = service
         self._registry = {
             profile_id: Path(path)
             for profile_id, path in (profile_registry or _DEFAULT_REGISTRY).items()
         }
+        self._profile_gate = profile_gate
         self._lock = threading.RLock()
+
+    def _gate_for(self, profile_id: str, registry_acceptance: str):
+        if self._profile_gate is not None:
+            return self._profile_gate.evaluate(
+                profile_id=profile_id, registry_acceptance=registry_acceptance
+            )
+        return evaluate_host_record(
+            registry_acceptance=registry_acceptance,
+            host_record=None,
+            facts_digest=None,
+        )
 
     def inspect(
         self,
@@ -255,14 +270,17 @@ class OperationFacade:
                 profile_id=profile_id,
             )
         profile = load_profile(path)
-        acceptance = profile["acceptance"]
+        gate = self._gate_for(profile["id"], str(profile["acceptance"]))
         payload = {
             "profileId": profile["id"],
-            "acceptance": acceptance,
-            "available": acceptance == "verified",
+            "acceptance": gate.acceptance,
+            "available": gate.available,
             "hostClass": profile["hostClass"],
             "tier": profile["tier"],
             "variant": profile.get("variant"),
+            "hostResult": gate.host_result,
+            "failureGroups": list(gate.failure_groups),
+            "factsDigest": gate.facts_digest,
         }
         return self._finish_success(
             "profiles.inspect",
@@ -402,7 +420,6 @@ class OperationFacade:
         idempotency_key: str,
         items: Any,
     ) -> OperationResult:
-        del items
         try:
             sandbox = self._peek(idempotency_key)
         except (RuntimeError, OSError, sqlite3.Error):
@@ -418,10 +435,33 @@ class OperationFacade:
                 profile_id=None if sandbox is None else sandbox.profile_id,
                 sandbox_id=None if sandbox is None else sandbox.name,
             )
-        return self._finish_error(
+        source = _collect_source(items)
+        if source is None:
+            return self._finish_error(
+                "collect",
+                identity,
+                refused("invalid_profile"),
+                profile_id=sandbox.profile_id,
+                sandbox_id=sandbox.name,
+            )
+
+        def _call() -> CollectResult:
+            return self._service.collect(idempotency_key, source)
+
+        collected = self._call_service(
+            "collect", identity, _call, profile_id=sandbox.profile_id
+        )
+        if isinstance(collected, OperationResult):
+            return collected
+        return self._finish_success(
             "collect",
             identity,
-            refused("unsupported"),
+            {
+                "artifactRef": collected.artifact_ref,
+                "source": collected.source,
+                "snapshot": collected.snapshot,
+                "bytesHashed": collected.bytes_hashed,
+            },
             profile_id=sandbox.profile_id,
             sandbox_id=sandbox.name,
         )
@@ -737,6 +777,18 @@ def _refused_value_error(error: ValueError) -> str | None:
         if fragment in message:
             return code
     return None
+
+
+def _collect_source(items: Any) -> str | None:
+    if not isinstance(items, list) or not items:
+        return None
+    first = items[0]
+    if not isinstance(first, dict):
+        return None
+    path = first.get("path")
+    if not isinstance(path, str) or not path.startswith("/") or "\x00" in path:
+        return None
+    return path
 
 
 @cache
