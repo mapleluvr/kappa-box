@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -18,6 +19,7 @@ _FIRST_PROFILE = "wsl2:l1@openshell-docker"
 _FIRST_PROFILE_DISTRIBUTION = "kappa-box-ubuntu-24.04"
 _PROBE_SUITE_VERSION = "0.1.0-host-visibility"
 WSL_SHARE_PATH = r"\\wsl$\kappa-box-ubuntu-24.04"
+ALLOW_WSL_SHARE_ENV = "KAPPA_BOX_ALLOW_WSL_SHARE"
 _REQUIRED_CONTROLLERS = ("cpu", "memory", "pids")
 _DRIVE_MOUNT = re.compile(r"^/mnt/[a-zA-Z]$")
 _SENSITIVE_DOCKER_KEYS = ("Name", "ID", "HTTP Proxy", "HTTPS Proxy")
@@ -80,7 +82,11 @@ def collect_host_visibility(
     checker = share_checker or PathShareVisibilityChecker()
     commands = _run_commands(executor, host_visibility_command_specs(distribution))
     by_name = {command["name"]: command for command in commands}
-    observations, checks = _observe_and_judge(by_name, checker)
+    observations, checks = _observe_and_judge(
+        by_name,
+        checker,
+        allow_wsl_share=_allow_wsl_share(),
+    )
     failed = [check for check in checks if not check.passed]
     if failed:
         group = {
@@ -167,9 +173,18 @@ def _run_commands(
     return commands
 
 
+def _allow_wsl_share() -> bool:
+    value = os.environ.get(ALLOW_WSL_SHARE_ENV)
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _observe_and_judge(
     commands: dict[str, dict[str, Any]],
     share_checker: ShareVisibilityChecker,
+    *,
+    allow_wsl_share: bool = False,
 ) -> tuple[dict[str, Any], list[CheckOutcome]]:
     kernel = _parse_kernel(commands["wsl.kernel"])
     distro = _parse_distro(commands["wsl.version"], commands["wsl.list"])
@@ -183,7 +198,7 @@ def _observe_and_judge(
     )
     lsm = _parse_lsm(commands["host.lsm"], commands["host.lsm.proc"])
     engine = _parse_engine(commands["docker.version"], commands["docker.info"])
-    wsl_share = _parse_wsl_share(share_checker)
+    wsl_share = _parse_wsl_share(share_checker, allow_wsl_share=allow_wsl_share)
 
     observations = {
         "kernel": kernel,
@@ -444,14 +459,22 @@ def _docker_info_fields(command: dict[str, Any]) -> dict[str, str]:
     return fields
 
 
-def _parse_wsl_share(share_checker: ShareVisibilityChecker) -> dict[str, Any]:
+def _parse_wsl_share(
+    share_checker: ShareVisibilityChecker,
+    *,
+    allow_wsl_share: bool = False,
+) -> dict[str, Any]:
     try:
         visibility = share_checker.observe(WSL_SHARE_PATH)
     except OSError:
         visibility = "unreadable"
     if visibility not in _SHARE_STATES:
         visibility = "unreadable"
-    return {"path": WSL_SHARE_PATH, "visibility": visibility}
+    record: dict[str, Any] = {"path": WSL_SHARE_PATH, "visibility": visibility}
+    if allow_wsl_share:
+        record["enforced"] = False
+        record["waivedBy"] = ALLOW_WSL_SHARE_ENV
+    return record
 
 
 def _wsl_conf_checks(
@@ -573,6 +596,12 @@ def _lsm_check(parsed: dict[str, Any]) -> CheckOutcome:
 
 def _wsl_share_check(parsed: dict[str, Any]) -> CheckOutcome:
     visibility = parsed["visibility"]
+    if parsed.get("enforced") is False:
+        return CheckOutcome(
+            "wsl.share",
+            True,
+            f"wsl.share waived by {ALLOW_WSL_SHARE_ENV}; {WSL_SHARE_PATH} is {visibility}",
+        )
     if visibility == "missing":
         return CheckOutcome(
             "wsl.share",

@@ -65,7 +65,7 @@ l2 的 runtime 选择本身是未决项：同一发行版内可选 runsc（轻�
 
 | 组 | 探针 | 通过 | 拒绝 |
 | --- | --- | --- | --- |
-| 宿主与发行版 | 专用发行版 `kappa-box-ubuntu-24.04` 的 `wsl.conf`（关 automount、关 interop、systemd）、Windows drive `/mnt` 与 `drvfs` 可见性、`\\wsl$` share、cgroup 有效 controller 与限额 | Windows drive alias 无法重暴露受保护对象；限额在压测下真实生效 | 任一项依赖宿主默认配置；当前 slice 只把 `/mnt/c` 形式的 Windows drive 和 drvfs 作为 host drive 暴露判定，`/mnt/wsl`、`/mnt/wslg` 等 WSL 系统挂载另行记录，不据此判定 Windows drive 暴露 |
+| 宿主与发行版 | 专用发行版 `kappa-box-ubuntu-24.04` 的 `wsl.conf`（关 automount、关 interop、systemd）、Windows drive `/mnt` 与 `drvfs` 可见性、`\\wsl$` share、cgroup 有效 controller 与限额 | Windows drive alias 无法重暴露受保护对象；限额在压测下真实生效 | 任一项依赖宿主默认配置；当前 slice 只把 `/mnt/c` 形式的 Windows drive 和 drvfs 作为 host drive 暴露判定，`/mnt/wsl`、`/mnt/wslg` 等 WSL 系统挂载另行记录，不据此判定 Windows drive 暴露。`KAPPA_BOX_ALLOW_WSL_SHARE=1` 可豁免 `\\wsl$` 可见性检查，其它 host 项仍强制 |
 | 引擎与策略 | `docker info` 的 runtimes / cgroup / storage；LSM 列表与 Landlock ABI；seccomp 状态；`hard_requirement` 下的创建失败行为 | 策略按声明强制，缺一即拒绝创建 | 需要 `best_effort` 才能启动 |
 | 资源 | CPU / 内存 / PID 限额在实例内的实测上限，与调用方预算对照 | 限额可观测、可核验、不可被实例绕过 | 只有调用方预算或 watchdog |
 | 网络 | deny-by-default；允许列表命中；DNS 行为；IPv6；RFC1918、metadata、Docker / WSL gateway、管理面地址的拒绝路径 | 未授权目标在真实调用中被拒并留证 | 靠 prompt 或靠「没试过」 |

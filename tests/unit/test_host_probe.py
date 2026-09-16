@@ -11,6 +11,7 @@ from kappa_box import host_probe as host_probe_mod
 from kappa_box.host_probe import (
     WSL_SHARE_PATH,
     PathShareVisibilityChecker,
+    ShareVisibility,
     collect_host_visibility,
     redact_host_observation,
 )
@@ -62,10 +63,10 @@ class FakeExecutor:
 
 @dataclass
 class FakeShareChecker:
-    state: str
+    state: ShareVisibility
     seen: list[str]
 
-    def observe(self, path: str) -> str:
+    def observe(self, path: str) -> ShareVisibility:
         self.seen.append(path)
         if path != WSL_SHARE_PATH:
             raise ValueError("wsl share path is not registered")
@@ -537,7 +538,7 @@ def isolated_pass_overrides() -> dict[str, CommandResult]:
     }
 
 
-def collect_isolated(share_state: str, **overrides: CommandResult):
+def collect_isolated(share_state: ShareVisibility, **overrides: CommandResult):
     checker = FakeShareChecker(state=share_state, seen=[])
     merged = isolated_pass_overrides()
     merged.update(overrides)
@@ -619,6 +620,34 @@ def test_missing_wsl_share_passes_share_check_when_other_checks_pass():
     assert record["observations"]["wslShare"]["visibility"] == "missing"
     assert host_group(record)["result"] == "pass"
     assert record["failureGroups"] == []
+
+
+def test_allow_wsl_share_env_does_not_fail_visible_share_when_other_checks_pass(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("KAPPA_BOX_ALLOW_WSL_SHARE", "1")
+    record, checker = collect_isolated("visible")
+
+    assert checker.seen == [WSL_SHARE_PATH]
+    assert record["observations"]["wslShare"]["visibility"] == "visible"
+    assert record["observations"]["wslShare"]["enforced"] is False
+    assert record["observations"]["wslShare"]["waivedBy"] == "KAPPA_BOX_ALLOW_WSL_SHARE"
+    assert host_group(record)["result"] == "pass"
+    assert record["failureGroups"] == []
+    assert "visible from Windows" not in host_group(record)["reason"]
+    assert record["acceptance"] == "unverified"
+
+
+def test_allow_wsl_share_env_does_not_skip_lsm_check(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("KAPPA_BOX_ALLOW_WSL_SHARE", "1")
+    record, _checker = collect_daily()
+    reason = host_group(record)["reason"]
+
+    assert host_group(record)["result"] == "fail"
+    assert "LSM list is unreadable" in reason
+    assert "visible from Windows" not in reason
 
 
 def test_empty_cgroup_subtree_fails_closed_with_specific_reason():
