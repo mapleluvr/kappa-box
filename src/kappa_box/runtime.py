@@ -24,6 +24,7 @@ from kappa_box.outcomes import (
     l1_execution_error,
     outcome_from_record,
     refused,
+    unknown,
 )
 
 _REGISTERED_PROFILE = "wsl2:l1@openshell-docker"
@@ -246,12 +247,27 @@ class ExecResult:
     truncated: bool = False
 
 
+@dataclass(frozen=True)
+class CollectResult:
+    source: str
+    artifact_ref: str
+    bytes_hashed: int
+    snapshot: bool = True
+
+
 class RuntimeService:
     """Own persistent sandbox lifecycle, idempotency, and event cursor."""
 
-    def __init__(self, adapter: OpenShellDockerAdapter, *, state_path: Path) -> None:
+    def __init__(
+        self,
+        adapter: OpenShellDockerAdapter,
+        *,
+        state_path: Path,
+        collect_dir: Path | None = None,
+    ) -> None:
         self._adapter = adapter
         self._state_path = Path(state_path)
+        self._collect_dir = Path(collect_dir) if collect_dir is not None else self._state_path.parent / "collect"
         self._handles: dict[str, Sandbox] = {}
         self._lock = threading.RLock()
         self._initialize_store()
@@ -393,6 +409,33 @@ class RuntimeService:
             deleted = self._adapter.delete(self._known(idempotency_key))
             self._update_state(idempotency_key, deleted)
             return deleted
+
+    def collect(
+        self,
+        idempotency_key: str,
+        source: str,
+        *,
+        timeout_seconds: float = 120.0,
+    ) -> CollectResult:
+        with self._lock:
+            if self._adapter.profile_acceptance != "verified":
+                raise OperationOutcomeError(refused("unsupported"))
+            sandbox = self._known(idempotency_key)
+            posix = f"{self._adapter._config.trusted_staging_root}/collect-{idempotency_key}"
+            handle = self._adapter.register_staging_path(posix)
+            self._adapter.download(
+                sandbox, source, handle, timeout_seconds=timeout_seconds
+            )
+            artifact = self._collect_dir / "artifact"
+            if not artifact.is_file():
+                raise OperationOutcomeError(unknown("host_unreachable"))
+            payload = artifact.read_bytes()
+            digest = hashlib.sha256(payload).hexdigest()
+            return CollectResult(
+                source=source,
+                artifact_ref=f"sha256:{digest}",
+                bytes_hashed=len(payload),
+            )
 
     def append_event(
         self,

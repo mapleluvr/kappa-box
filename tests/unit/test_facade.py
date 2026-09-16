@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from pathlib import Path
@@ -127,6 +128,7 @@ def _service(tmp_path: Path, runner: RecordingRunner, **kwargs) -> RuntimeServic
     return RuntimeService(
         OpenShellDockerAdapter(config(**kwargs), runner),
         state_path=tmp_path / "runtime.db",
+        collect_dir=tmp_path / "collect",
     )
 
 
@@ -523,8 +525,12 @@ def test_verified_recording_path_exec_and_delete_do_not_fabricate_facts_or_artif
             result(backend_json()),
             result("out", stderr="err"),
             result(),
+            result(),
         ]
     )
+    collect_dir = tmp_path / "collect"
+    collect_dir.mkdir()
+    (collect_dir / "artifact").write_bytes(b"stable-snapshot")
     facade = _facade(
         tmp_path,
         runner,
@@ -555,18 +561,18 @@ def test_verified_recording_path_exec_and_delete_do_not_fabricate_facts_or_artif
     assert executed.payload["exitCode"] == 0
     assert executed.payload["stdout"] == "out"
     assert executed.payload["stderr"] == "err"
-    collect_record = collected.to_outcome_record()
-    assert collect_record is not None
-    assert collect_record["kind"] == "refused"
-    assert collect_record["code"] == "unsupported"
-    assert collected.payload.get("artifactRef") is None
-    assert collected.identity.get("artifactRef") is None
+    digest = hashlib.sha256(b"stable-snapshot").hexdigest()
+    assert collected.kind is None
+    assert collected.payload["artifactRef"] == f"sha256:{digest}"
+    assert collected.payload["snapshot"] is True
+    assert collected.payload["source"] == "/work/report.json"
     assert deleted.kind is None
     assert deleted.payload["state"] == "deleted"
     assert _verbs(runner) == [
         ("sandbox", "create"),
         ("sandbox", "get"),
         ("sandbox", "exec"),
+        ("sandbox", "download"),
         ("sandbox", "delete"),
     ]
 
@@ -823,12 +829,12 @@ def test_collect_uses_local_peek_and_does_not_adopt_or_write_artifact(
 
     record = collected.to_outcome_record()
     assert record is not None
-    assert record["kind"] == "refused"
-    assert record["code"] == "unsupported"
-    assert record["sideEffects"] == "none"
+    assert record["kind"] == "unknown"
+    assert record["code"] == "host_unreachable"
     assert collected.payload.get("artifactRef") is None
     assert collected.identity.get("artifactRef") is None
-    assert peek_runner.calls == []
+    assert peek_runner.calls
+    assert peek_runner.calls[0][0][7:9] == ("sandbox", "download")
     assert _claim_state(state_path, "attempt-1") == SandboxState.READY
 
 
