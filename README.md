@@ -62,12 +62,15 @@ kappa-box/
 │   ├── host-observation.schema.json
 │   ├── landlock-capability.schema.json
 │   ├── runtime-vertical-slice.schema.json
-│   └── operation-outcome.schema.json
+│   ├── operation-outcome.schema.json
+│   ├── s1-outcome.schema.json
+│   └── s1-event.schema.json
 ├── profiles/
 │   └── registry/wsl2-l1-openshell-docker.json
 ├── src/kappa_box/
 │   ├── facts.py
 │   ├── outcomes.py
+│   ├── facade.py
 │   ├── probes.py
 │   ├── host_probe.py
 │   ├── landlock_probe.py

@@ -18,6 +18,7 @@ from typing import Any, Protocol
 from kappa_box.outcomes import (
     OperationOutcome,
     OperationOutcomeError,
+    failed,
     l1_create_gate,
     l1_execution_error,
     outcome_from_record,
@@ -344,15 +345,25 @@ class RuntimeService:
     ) -> Sandbox:
         with self._lock:
             sandbox = self._known(idempotency_key)
-            ready = self._adapter.wait_ready(sandbox, timeout_seconds=timeout_seconds)
+            try:
+                ready = self._adapter.wait_ready(
+                    sandbox, timeout_seconds=timeout_seconds
+                )
+            except TimeoutError as error:
+                raise OperationOutcomeError(
+                    refused("invalid_state"), detail=str(error)
+                ) from error
             self._save(
                 idempotency_key,
                 _request_json_for(self._state_path, idempotency_key),
                 ready,
             )
-
             self._handles[idempotency_key] = ready
-            return ready
+            if ready.state is SandboxState.READY:
+                return ready
+            if ready.state is SandboxState.FAILED:
+                raise OperationOutcomeError(failed("provisioning_failed"))
+            raise OperationOutcomeError(refused("invalid_state"))
 
     def exec(
         self,
@@ -382,14 +393,33 @@ class RuntimeService:
             self._update_state(idempotency_key, deleted)
             return deleted
 
+    def peek(self, idempotency_key: str) -> Sandbox | None:
+        with self._lock:
+            handle = self._handles.get(idempotency_key)
+            if handle is not None:
+                return handle
+            row = self._read(idempotency_key)
+            if row is None or row["sandbox_name"] is None:
+                return None
+            try:
+                state = SandboxState(row["state"])
+            except ValueError as error:
+                raise RuntimeError("sandbox local state cannot be confirmed") from error
+            return Sandbox(
+                name=row["sandbox_name"],
+                profile_id=row["profile_id"],
+                image=row["image"],
+                state=state,
+            )
+
     def _known(self, idempotency_key: str) -> Sandbox:
         try:
             return self._handles[idempotency_key]
         except KeyError:
-            row = self._read(idempotency_key)
-            if row is None or row["sandbox_name"] is None:
+            sandbox = self.peek(idempotency_key)
+            if sandbox is None:
                 raise KeyError("unknown idempotency key") from None
-            sandbox = self._handle_from_row(idempotency_key, row)
+            self._adapter._bind(sandbox)
             self._handles[idempotency_key] = sandbox
             return sandbox
 
@@ -644,6 +674,8 @@ class OpenShellDockerAdapter:
         result = self._run(
             ("sandbox", "get", "--output", "json", name), timeout_seconds=30.0
         )
+        if result.returncode == 124:
+            raise TimeoutError(f"sandbox inspect timed out: {name}")
         if result.returncode != 0:
             raise RuntimeError(f"sandbox adoption failed: {result.stderr.strip()}")
         if result.truncated:
@@ -667,6 +699,8 @@ class OpenShellDockerAdapter:
                 ("sandbox", "get", "--output", "json", sandbox.name),
                 timeout_seconds=min(30.0, remaining),
             )
+            if result.returncode == 124:
+                raise TimeoutError(f"sandbox inspect timed out: {sandbox.name}")
             if result.returncode != 0:
                 if _looks_deleted(result.stderr):
                     return _with_state(sandbox, SandboxState.DELETED)

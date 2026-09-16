@@ -1,6 +1,6 @@
 # 对外形状：调用面、profile 与路由
 
-> 状态：接口草案与首个 runtime vertical slice（2026-09-12）。本文固定 kappa-box 对外暴露什么、调用方不能做什么；当前 CLI 已可运行已登记 Windows/WSL2 OpenShell + Docker route 的最小真实生命周期，但完整 SDK、facts、session 与攻击探针仍未实现。流程与状态图见 [flows.md](flows.md)；分层与拒绝语义见 [semantic-architecture.md](semantic-architecture.md)。
+> 状态：接口草案、首个 runtime vertical slice，以及进程内 S1 operation/event facade（2026-09-15）。本文固定 kappa-box 对外暴露什么、调用方不能做什么；当前 CLI 已可运行已登记 Windows/WSL2 OpenShell + Docker route 的最小真实生命周期，进程内 facade 把 inspect / create / wait-ready / exec / collect / delete 收成带 `operationId` 的 outcome 与可续读事件。完整 SDK、facts、session、稳定 collect 与攻击探针仍未实现。流程与状态图见 [flows.md](flows.md)；分层与拒绝语义见 [semantic-architecture.md](semantic-architecture.md)。
 
 ## 1. 调用面只有一处
 
@@ -70,6 +70,15 @@ resolver                     profile → 宿主类别、服务端点、所需凭
 | 文件 | `stage` / `collect` | 只走 kappa-box 的文件通道；路径由 profile 授予范围决定 |
 | 管理 | `sandboxes.stop` / `delete` / `list` / `inspect` / `sweep`（`start` 为候选，见 [open-questions.md](open-questions.md)） | stop 冻结保留；delete 幂等且终结；sweep 收敛孤儿 |
 
+S1 进程内 facade（`kappa_box.facade.OperationFacade`）只收窄操作面，不引入传输协议：
+
+```text
+profiles.inspect → sandboxes.create → sandboxes.waitReady → exec → collect → sandboxes.delete
+observe(cursor)
+```
+
+每个操作带 `operationId`，并关联调用方转发的 `runId` / `requestId` 与 Box 持有的 `profileId`。错误结果是 S1 outcome：`operationId`、`operation`、`identity`、`kind`、`code`、`sideEffects`、`reconcile`；内层 L1 记录仍只有 `kind` / `code` / `sideEffects` / `reconcile`，见 [`schemas/operation-outcome.schema.json`](../schemas/operation-outcome.schema.json) 与 [`schemas/s1-outcome.schema.json`](../schemas/s1-outcome.schema.json)。事件由 runtime 进程内日志持有，`observe(cursor)` 按游标续读；游标不是 revision。当前宿主上已登记但未验收的 `sandboxes.create` 在 claim / backend 前给出 `refused(profile_unverified)`，不产生 `sandboxId`。未登记 profile 的 create 同样在 claim / backend 前给出 `refused(profile_unknown)`，不会被当前宿主的 `profile_unverified` 盖住。调用方 identity 与 `operationId` 在任何 backend 调用或事件写入前按 envelope 长度校验，超界给出 `refused(invalid_profile)` 且无副作用。`waitReady` 只有状态为 `ready` 时成功，不提供已验证 facts，也不编造 `factsDigest`；`failed` 给出 `failed(provisioning_failed)`，`stopped` / `deleted` 与已知沙箱等待超时 / inspect 超时给出 `refused(invalid_state)`，不得把已知沙箱写成 `unknown`。新 `RuntimeService` 读取已有 sqlite claim 时走本地状态再 inspect，不先 `adopt` 改写 claim；inspect 超时保持原状态，不二次 create。adapter `adopt` 遇到 get 超时（returncode 124）视为 `TimeoutError`。非超时的 inspect 失败仍是 `unknown(host_unreachable)`。`waitReady` / `exec` / `sandboxes.delete` 的错误事件在已知实例时带 `sandboxId`；S1 outcome identity 不含 `sandboxId`。`collect` 只做本地 handle / sqlite 查找，在稳定快照未实现时 `refused(unsupported)`，不产生 `artifactRef`，也不把 live copy 当证据；查找无法在本地确认（含 sqlite / `OSError`）时给出 `unknown(host_unreachable)`。未列入上列的操作返回 `refused(unsupported)`。
+
 ## 5. 语义规则
 
 1. **create 幂等**：同 `idempotencyKey` 不产生第二个实例；重放返回同一实例身份；同键但请求体不同则
@@ -124,7 +133,7 @@ resolver                     profile → 宿主类别、服务端点、所需凭
 
 预执行的策略 / facts / profile 拒绝一律 `refused`；后端已调用且结果确定的失败一律 `failed`；只有调用结果不确定、副作用范围核不清时才是 `unknown`。
 
-**与跨组件 error envelope 的字段对应**（S0 协调稿未冻结，不是本 schema 的一部分）：envelope 用 `sideEffect`（单数）∈ `{none, present, unknown}`，以及 `operation` / `requestId` / `retry` / `reconcile`。Box 记录只含 `kind` / `code` / `sideEffects` / `reconcile`，`additionalProperties: false`，因此不能当完整 envelope fixture 直接吃。映射是 `sideEffects=none→sideEffect=none`、`present→present`、`unreconciled→unknown`；`reconcile` 仅在 `kind=unknown` 为 `true`。`operation` 与 `requestId` 留在未冻结 envelope，本 L1 合同不发明完整服务信封。
+**与跨组件 error envelope 的字段对应**（S0 协调稿未冻结，不是本 schema 的一部分）：envelope 用 `sideEffect`（单数）∈ `{none, present, unknown}`，以及 `operation` / `requestId` / `retry` / `reconcile`。Box 记录只含 `kind` / `code` / `sideEffects` / `reconcile`，`additionalProperties: false`，因此不能当完整 envelope fixture 直接吃。映射是 `sideEffects=none→sideEffect=none`、`present→present`、`unreconciled→unknown`；`reconcile` 仅在 `kind=unknown` 为 `true`。`operation` 与 `requestId` 留在未冻结 envelope，本 L1 合同不发明完整服务信封。S1 facade 把这两项以及 `operationId` / `identity` 放在外层 outcome 上，不改 L1 记录。
 
 ## 7. 六件事：内部执行契约
 

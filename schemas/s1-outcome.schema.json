@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kappa-box.invalid/schemas/s1-outcome.schema.json",
+  "title": "kappa-box S1 operation outcome draft",
+  "description": "In-process S1 operation envelope wrapping the L1 refused/failed/unknown record with operationId, operation, and identity. This is not a transport protocol and does not record verified facts, sandbox isolation, or artifact evidence. The inner L1 record remains schemas/operation-outcome.schema.json.",
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profileId"],
+      "properties": {
+        "runId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "requestId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "profileId": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "operationId": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "operation": { "type": "string", "minLength": 1, "maxLength": 128 }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operationId",
+        "operation",
+        "identity",
+        "kind",
+        "code",
+        "sideEffects",
+        "reconcile"
+      ],
+      "properties": {
+        "operationId": { "$ref": "#/$defs/operationId" },
+        "operation": { "$ref": "#/$defs/operation" },
+        "identity": { "$ref": "#/$defs/identity" },
+        "kind": { "const": "refused" },
+        "code": {
+          "enum": [
+            "profile_unknown",
+            "profile_unverified",
+            "invalid_profile",
+            "facts_mismatch",
+            "grant_denied",
+            "network_profile_denied",
+            "image_unavailable",
+            "resource_exhausted",
+            "invalid_state",
+            "unsupported",
+            "unauthorized",
+            "idempotency_conflict"
+          ]
+        },
+        "sideEffects": { "const": "none" },
+        "reconcile": { "const": false }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operationId",
+        "operation",
+        "identity",
+        "kind",
+        "code",
+        "sideEffects",
+        "reconcile"
+      ],
+      "properties": {
+        "operationId": { "$ref": "#/$defs/operationId" },
+        "operation": { "$ref": "#/$defs/operation" },
+        "identity": { "$ref": "#/$defs/identity" },
+        "kind": { "const": "failed" },
+        "code": {
+          "enum": ["provisioning_failed", "snapshot_unstable"]
+        },
+        "sideEffects": { "const": "present" },
+        "reconcile": { "const": false }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operationId",
+        "operation",
+        "identity",
+        "kind",
+        "code",
+        "sideEffects",
+        "reconcile"
+      ],
+      "properties": {
+        "operationId": { "$ref": "#/$defs/operationId" },
+        "operation": { "$ref": "#/$defs/operation" },
+        "identity": { "$ref": "#/$defs/identity" },
+        "kind": { "const": "unknown" },
+        "code": {
+          "enum": ["host_unreachable", "deadline_exceeded"]
+        },
+        "sideEffects": { "const": "unreconciled" },
+        "reconcile": { "const": true }
+      }
+    }
+  ]
+}

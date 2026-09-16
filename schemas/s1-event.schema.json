@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kappa-box.invalid/schemas/s1-event.schema.json",
+  "title": "kappa-box S1 event envelope draft",
+  "description": "In-process runtime-owned S1 event envelope. cursor is a readable event-log position, not a revision alias, and is not a network transport.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "eventId",
+    "cursor",
+    "type",
+    "identity",
+    "revision",
+    "cause",
+    "payload",
+    "provenance"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "s1-draft-1" },
+    "eventId": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "cursor": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+    "type": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profileId", "operationId", "revision"],
+      "properties": {
+        "runId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "candidateRef": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "baselineRef": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "benchmarkRevision": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "profileId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "sandboxId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "sessionId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "branchId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "requestId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "revision": { "type": "integer", "minimum": 1 },
+        "operationId": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "revision": { "type": "integer", "minimum": 1 },
+    "cause": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "external_intent" },
+        "requestId": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "payload": { "type": "object" },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "source"],
+      "properties": {
+        "owner": { "const": "kappa-box" },
+        "source": { "const": "runtime" }
+      }
+    }
+  }
+}
